@@ -4,11 +4,95 @@ import { Video } from "../models/video.model.js"
 import { asyncHandler } from "../utils/async_handler.js"
 import { uploadVideo,uploadImage, deleteImage, deleteVideo } from "../utils/cloudinary.js"
 import { User } from "../models/user.model.js"
+import mongoose from "mongoose"
+
 
 
 const getAllVideos = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query
+    const { page , limit , query, sortBy, sortType, userId } = req.query
     //TODO: get all videos based on query, sort, pagination
+    const variables = {}
+    const parsedPage = Number(page)
+    variables.page =  Number.isFinite(parsedPage) && parsedPage>=1 ? parsedPage : 1
+    
+    const parsedLimit = Number(limit)
+    variables.limit = Number.isFinite(parsedLimit) && parsedLimit>=1 ? parsedLimit : 10
+
+    const trimmedSortType = typeof(sortType) === "string" ? sortType.trim() : ""
+    variables.sortType = (trimmedSortType=== "asc" || trimmedSortType === "desc") ? trimmedSortType : "desc" 
+
+    variables.sortBy = typeof(sortBy) === "string" && sortBy.trim() ? sortBy.trim() : "createdAt"
+
+   if(typeof(query) === "string" && query.trim()){
+    variables.query = query.trim()
+   }
+   if(typeof(userId) === "string" && mongoose.Types.ObjectId.isValid(userId)){
+    variables.userId = new mongoose.Types.ObjectId(userId)
+   }
+
+   const pipeline = []
+   //query , id, sort , paginate
+   if(variables.query){
+    pipeline.push({
+        $match:{
+            $or:[
+                {title: variables.query},
+                {description: variables.query}
+            ]
+        }
+    })
+   }
+   if(variables.userId){
+    pipeline.push(
+        {
+            $match:{owner: variables.userId},
+        }
+    )
+   }
+   pipeline.push({
+    $sort:{
+        [variables.sortBy]: variables.sortType === "asc" ? 1 : -1
+    }
+   })
+
+   pipeline.push(
+    {$skip:(variables.page-1)*variables.limit},
+    {$limit: variables.limit}
+   )
+   pipeline.push({
+        $lookup:{
+            from: "users",
+            localField: "owner",
+            foreignField: "_id",
+            as: "owner"
+        }
+    })
+    pipeline.push({
+        $unwind: "$owner"
+    })
+    pipeline.push({
+        $project:{
+            _id: 1,
+            videoFile: 1,
+            thumbnail: 1,
+            title: 1,
+            description: 1,
+            duration: 1,
+            views: 1,
+            isPublished: 1,
+            owner:{
+                _id: "$owner._id",
+                username: "$owner.username",
+                avatar: "$owner.avatar"
+            }
+
+        }
+    })
+   const videos = await Video.aggregate(pipeline)
+   console.log(videos)
+   res.status(200)
+   .json(new ApiResponse(200,videos,"Fetched the videos successfully"))
+
 })
 
 const publishAVideo = asyncHandler(async (req, res) => {
@@ -16,28 +100,28 @@ const publishAVideo = asyncHandler(async (req, res) => {
     if(!videoPath){
         throw new ApiError(404,"Video file is required")
     }
-    console.log("video path is valid",videoPath)
+    
     const thumbnailPath = req.files.thumbnail[0].path
     if(!thumbnailPath){
         throw new ApiError(404,"Thumbnail is required")
     }
-    console.log("thumnail path is valid",thumbnailPath)
+
     const { title, description} = req.body
     if(!title){
         throw new ApiError(404,"Title is required")
     }
-    console.log("title is valid",title)
+
     const video = await uploadVideo(videoPath)
-    console.log("video uploaded successfully",video)
+
     const videoPublicId = video.public_id
     const videoSecureUrl = video.secure_url
-    console.log(videoPublicId,videoSecureUrl)
+
     if(!videoPublicId || !videoSecureUrl){
         throw new ApiError(500,"Video Upload failed")
     }
     
     const thumbnail = await uploadImage(thumbnailPath)
-    console.log("thumnail uploades successfully",thumbnail)
+
     const thumbnailPublicId = thumbnail.public_id
     const thumbnailSecureUrl = thumbnail.secure_url
     if(!thumbnailPublicId || !thumbnailSecureUrl){
@@ -45,7 +129,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
     }
     const videoDoc = await Video.create({videoFile: videoSecureUrl,videoPublicId,thumbnail: thumbnailSecureUrl, thumbnailPublicId,title,description,owner: req.user._id,duration: video.duration
     })
-    console.log("video doc created successfully",videoDoc)
+
     if(!videoDoc){
         throw new ApiError(500,"Error while creating the video doc")
     }
@@ -96,10 +180,12 @@ const getVideoById = asyncHandler(async (req, res) => {
                             username: 1,
 
                         }
-                    }
-
+                    },
                 ],
             }
+        },
+        {
+            $unwind: "$owner"
         },
         {
             $project:{
@@ -122,9 +208,9 @@ const getVideoById = asyncHandler(async (req, res) => {
 
 const updateVideo = asyncHandler(async (req, res) => {
     const videoId  = req.params._id
-    console.log(videoId)
+
     const videoDoc = await Video.findById(videoId)
-    console.log(videoDoc)
+
     if(!videoDoc.owner.equals(req.user._id)){
         throw new ApiError(401,"Unauthorized access")
     }
@@ -150,12 +236,12 @@ const updateVideo = asyncHandler(async (req, res) => {
     if(description!== "" && description!== undefined){
         videoDoc.description = description
     }
-    videoDoc.save({validateBeforeSave: false})
-    console.log(videoDoc)
+    await videoDoc.save({validateBeforeSave: false})
+
     const video = videoDoc.toObject()
     delete video.thumbnailPublicId
     delete video.videoPublicId
-    console.log(video)
+
     res.status(200)
     .json(new ApiResponse(200,video,"Video updated successfully"))
     
@@ -190,14 +276,14 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
     if(!videoDoc.owner.equals(req.user._id)){
         throw new ApiError(401,"Unauthorized Access")
     }
-    console.log(videoDoc)
+
     if(videoDoc.isPublished === true){
         videoDoc.isPublished = false
     }else{
         videoDoc.isPublished = true
     }
     await videoDoc.save({validateBeforeSave: false})
-    console.log(videoDoc)
+
     res.status(200)
     .json(new ApiResponse(200,{isPublished: videoDoc.isPublished},"Video status change successfully"))
     

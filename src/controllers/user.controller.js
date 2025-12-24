@@ -369,6 +369,7 @@ const getUserWatchHistory = asyncHandler(async(req,res)=>{
                         $project:{
                             videoFile: 1,
                             thumbnail: 1,
+                            description: 1,
                             title: 1,
                             duration: 1,
                             isPublished: 1,
