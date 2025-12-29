@@ -1,7 +1,7 @@
 import {asyncHandler} from '../utils/async_handler.js'
 import { ApiResponse } from '../utils/api_response.js'
 import {ApiError} from '../utils/api_error.js'
-import { uploadImage,deleteImage } from '../utils/cloudinary.js'
+import { uploadMedia,deleteMedia } from '../utils/cloudinary.js'
 import {User} from '../models/user.model.js'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
@@ -53,7 +53,7 @@ const registerUser = asyncHandler(async(req,res)=>{
         throw new ApiError(400,"Avatar is required")
     }
 
-    const avatar = await uploadImage(avatarPath)
+    const avatar = await uploadMedia(avatarPath)
     const avatarPublicId = avatar.public_id
     const avatarUrl = avatar.secure_url
     if(!avatarPublicId || !avatarUrl){
@@ -65,7 +65,7 @@ const registerUser = asyncHandler(async(req,res)=>{
     let coverImagePublicId;
     
     if(coverImagePath){
-        const coverImage = await uploadImage(coverImagePath)
+        const coverImage = await uploadMedia(coverImagePath)
         coverImageUrl = coverImage.secure_url
         coverImagePublicId = coverImage.public_id
         if(!coverImageUrl || !coverImagePublicId){
@@ -238,7 +238,7 @@ const UpdateUserAvatar = asyncHandler(async(req,res)=>{
     if(!avatarPath){
         throw new ApiError(400,"Avatar is required")
     }
-    const avatar = await uploadImage(avatarPath)
+    const avatar = await uploadMedia(avatarPath)
     const avatarPublicId = avatar.public_id
     const avatarUrl = avatar.secure_url
     if(!avatarPublicId || !avatarUrl){
@@ -248,7 +248,7 @@ const UpdateUserAvatar = asyncHandler(async(req,res)=>{
     userData.avatarPublicId = avatarPublicId
     userData.avatar = avatarUrl
     await userData.save({validateBeforeSave: false})
-    const isDeleted = await deleteImage(oldAvatar)
+    const isDeleted = await deleteMedia(oldAvatar,"image")
     console.log(isDeleted)
     res.status(200)
     .json(new ApiResponse(200,avatarUrl,"Avatar updated successfully"))
@@ -260,7 +260,7 @@ const UpdatUserCoverImage = asyncHandler(async(req,res)=>{
     if(!coverImagePath){
         throw new ApiError(400,"coverImage is required")
     }
-    const coverImage = await uploadImage(coverImagePath)
+    const coverImage = await uploadMedia(coverImagePath)
     const coverImagePublicId = coverImage.public_id
     const coverImageUrl = coverImage.secure_url
     if(!coverImagePublicId || !coverImageUrl){
@@ -270,7 +270,7 @@ const UpdatUserCoverImage = asyncHandler(async(req,res)=>{
     userData.coverImagePublicId = coverImagePublicId
     userData.coverImage = coverImageUrl
     await userData.save({validateBeforeSave: false})
-    const isDeleted = await deleteImage(oldCoverImage)
+    const isDeleted = await deleteMedia(oldCoverImage,"image")
     console.log(isDeleted)
     res.status(200)
     .json(new ApiResponse(200,coverImageUrl,"Avatar updated successfully"))

@@ -15,9 +15,9 @@ videoRouter.route("/publishAVideo").post(upload.fields([
         maxCount: 1
     }
 ]),verifyJWT,publishAVideo)
-videoRouter.route("/getVideoById/:_id").get(verifyJWT,getVideoById)
-videoRouter.route("/updateVideo/:_id").patch(upload.single('thumbnail'),verifyJWT,updateVideo)
-videoRouter.route("/deleteVideo/:_id").delete(verifyJWT,deleteVideoById)
-videoRouter.route("/togglePublishStatus/:_id").patch(verifyJWT,togglePublishStatus)
+videoRouter.route("/getVideoById/:videoId").get(verifyJWT,getVideoById)
+videoRouter.route("/updateVideo/:videoId").patch(upload.single('thumbnail'),verifyJWT,updateVideo)
+videoRouter.route("/deleteVideo/:videoId").delete(verifyJWT,deleteVideoById)
+videoRouter.route("/togglePublishStatus/:videoId").patch(verifyJWT,togglePublishStatus)
 
 export{videoRouter}

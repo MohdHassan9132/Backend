@@ -2,7 +2,7 @@ import { ApiResponse } from "../utils/api_response.js"
 import { ApiError } from "../utils/api_error.js"
 import { Video } from "../models/video.model.js"
 import { asyncHandler } from "../utils/async_handler.js"
-import { uploadVideo,uploadImage, deleteImage, deleteVideo } from "../utils/cloudinary.js"
+import { uploadMedia,deleteMedia } from "../utils/cloudinary.js"
 import { User } from "../models/user.model.js"
 import mongoose from "mongoose"
 
@@ -19,7 +19,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
     variables.limit = Number.isFinite(parsedLimit) && parsedLimit>=1 ? parsedLimit : 10
 
     const trimmedSortType = typeof(sortType) === "string" ? sortType.trim() : ""
-    variables.sortType = (trimmedSortType=== "asc" || trimmedSortType === "desc") ? trimmedSortType : "desc" 
+    variables.sortType = (trimmedSortType=== "asc" || trimmedSortType === "desc") ? trimmedSortType : "asc" 
 
     variables.sortBy = typeof(sortBy) === "string" && sortBy.trim() ? sortBy.trim() : "createdAt"
 
@@ -32,23 +32,33 @@ const getAllVideos = asyncHandler(async (req, res) => {
 
    const pipeline = []
    //query , id, sort , paginate
-   if(variables.query){
+   if (variables.userId) {
+  pipeline.push({
+    $match: { owner: variables.userId }
+  });
+
+  if (variables.query) {
     pipeline.push({
-        $match:{
-            $or:[
-                {title: variables.query},
-                {description: variables.query}
-            ]
-        }
-    })
-   }
-   if(variables.userId){
-    pipeline.push(
-        {
-            $match:{owner: variables.userId},
-        }
-    )
-   }
+      $match: {
+        $or: [
+          { title: { $regex: variables.query, $options: "i" } },
+          { description: { $regex: variables.query, $options: "i" } }
+        ]
+      }
+    });
+  }
+
+} else if (variables.query) {
+  pipeline.push({
+    $match: {
+      $or: [
+        { title: { $regex: variables.query, $options: "i" } },
+        { description: { $regex: variables.query, $options: "i" } }
+      ]
+    }
+  });
+}
+
    pipeline.push({
     $sort:{
         [variables.sortBy]: variables.sortType === "asc" ? 1 : -1
@@ -111,7 +121,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
         throw new ApiError(404,"Title is required")
     }
 
-    const video = await uploadVideo(videoPath)
+    const video = await uploadMedia(videoPath)
 
     const videoPublicId = video.public_id
     const videoSecureUrl = video.secure_url
@@ -120,7 +130,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
         throw new ApiError(500,"Video Upload failed")
     }
     
-    const thumbnail = await uploadImage(thumbnailPath)
+    const thumbnail = await uploadMedia(thumbnailPath)
 
     const thumbnailPublicId = thumbnail.public_id
     const thumbnailSecureUrl = thumbnail.secure_url
@@ -139,8 +149,8 @@ const publishAVideo = asyncHandler(async (req, res) => {
 })
 
 const getVideoById = asyncHandler(async (req, res) => {
-    const  videoId  =new mongoose.Types.ObjectId(req.params._id)
-    const userId = new mongoose.Types.ObjectId(req.user._id)
+    const  videoId  = new mongoose.Types.ObjectId(req.params.videoId)
+    const userId = req.user._id
     const video = await Video.aggregate([
         {
             $match: {_id: videoId}
@@ -207,13 +217,11 @@ const getVideoById = asyncHandler(async (req, res) => {
 })
 
 const updateVideo = asyncHandler(async (req, res) => {
-    const videoId  = req.params._id
-
-    const videoDoc = await Video.findById(videoId)
-
+    const {videoId}  = req.params
     if(!videoDoc.owner.equals(req.user._id)){
         throw new ApiError(401,"Unauthorized access")
     }
+    const videoDoc = await Video.findById(videoId)
     //TODO: update video details like title, description, thumbnail
     const {title , description} = req.body
     const thumbnailPath = req.file?.path
@@ -221,9 +229,12 @@ const updateVideo = asyncHandler(async (req, res) => {
         throw new ApiError(400,"At least one of the field is required")
     }
     if(thumbnailPath){
-        const newThumbnail = await uploadImage(thumbnailPath)
+        const newThumbnail = await uploadMedia(thumbnailPath)
         if(!newThumbnail){
             throw new ApiError(500,"Thumbnail upload failed")
+        }
+        if(videoDoc.thumbnailPublicId){
+            await deleteMedia(videoDoc.thumbnailPublicId,"image")
         }
         const newThumbnailUrl = newThumbnail.secure_url
         const newThumbnailPublicId = newThumbnail.public_id
@@ -249,7 +260,7 @@ const updateVideo = asyncHandler(async (req, res) => {
 })
 
 const deleteVideoById = asyncHandler(async (req, res) => {
-    const videoId = req.params._id
+    const {videoId} = req.params
     const videoDoc = await Video.findById(videoId)
     if(!videoDoc){
         throw new ApiError(404,"Video not found")
@@ -257,8 +268,8 @@ const deleteVideoById = asyncHandler(async (req, res) => {
     if(videoDoc.owner.toString()!== req.user._id.toString()){
         throw new ApiError(401,"Unauthorized Access")
     }
-    await deleteImage(videoDoc.thumbnailPublicId)
-    await deleteVideo(videoDoc.videoPublicId)
+    await deleteMedia(videoDoc.thumbnailPublicId,"image")
+    await deleteMedia(videoDoc.videoPublicId,"video")
     await User.updateMany(
         {watchHistory: videoDoc._id},
         {$pull: {watchHistory: videoDoc._id}}
@@ -271,7 +282,7 @@ const deleteVideoById = asyncHandler(async (req, res) => {
 })
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
-    const  videoId = req.params._id
+    const  {videoId} = req.params
     const videoDoc = await Video.findById(videoId)
     if(!videoDoc.owner.equals(req.user._id)){
         throw new ApiError(401,"Unauthorized Access")

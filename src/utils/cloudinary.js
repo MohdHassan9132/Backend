@@ -7,9 +7,9 @@ v2.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME
 })
 
-const uploadImage = async(ImagePath)=>{
+const uploadMedia = async(ImagePath)=>{
     try {
-        const response = await v2.uploader.upload(ImagePath)
+        const response = await v2.uploader.upload(ImagePath,{resource_type: "auto"})
         fs.unlinkSync(ImagePath)
         return response
     } catch (error) {
@@ -18,38 +18,14 @@ const uploadImage = async(ImagePath)=>{
     }
 }
 
-const deleteImage = async(imageId)=>{
+const deleteMedia = async(imageId,resource_type)=>{
     try {
-        const response = await v2.uploader.destroy(imageId)
+        const response = await v2.uploader.destroy(imageId,{resource_type: resource_type})
         return response
     } catch (error) {
         console.log(error)
     }
 }
 
-const uploadVideo = async(videoPath)=>{
-try {
-        const response = await v2.uploader.upload(videoPath,{
-            resource_type: "video"
-        })
-        fs.unlinkSync(videoPath)
-        console.log(response)
-       return response
-} catch (error) {
-    fs.unlinkSync(videoPath)
-    console.log(error?.message||error)
-}
-}
 
-const deleteVideo = async(videoId)=>{
-    try {
-        const response = await v2.uploader.destroy(videoId,{
-            resource_type: "video"
-        })
-        return response
-    } catch (error) {
-        console.log(error.message||error)
-    }
-}
-
-export {uploadImage,deleteImage,uploadVideo,deleteVideo}
+export {uploadMedia,deleteMedia}

@@ -1,5 +1,4 @@
 import mongoose from "mongoose"
-import { User } from "../models/user.model.js"
 import { Subscription } from "../models/subscription.model.js"
 import {ApiError} from '../utils/api_error.js'
 import {ApiResponse} from '../utils/api_response.js'
