@@ -8,102 +8,186 @@ import mongoose from "mongoose"
 
 
 
-const getAllVideos = asyncHandler(async (req, res) => {
-    const { page , limit , query, sortBy, sortType, userId } = req.query
-    //TODO: get all videos based on query, sort, pagination
-    const variables = {}
-    const parsedPage = Number(page)
-    variables.page =  Number.isFinite(parsedPage) && parsedPage>=1 ? parsedPage : 1
+// const getAllVideos = asyncHandler(async (req, res) => {
+//     const { page , limit , query, sortBy, sortType, userId } = req.query
+//     //TODO: get all videos based on query, sort, pagination
+//     const variables = {}
+//     const parsedPage = Number(page)
+//     variables.page =  Number.isFinite(parsedPage) && parsedPage>=1 ? parsedPage : 1
     
-    const parsedLimit = Number(limit)
-    variables.limit = Number.isFinite(parsedLimit) && parsedLimit>=1 ? parsedLimit : 10
+//     const parsedLimit = Number(limit)
+//     variables.limit = Number.isFinite(parsedLimit) && parsedLimit>=1 ? parsedLimit : 10
 
-    const trimmedSortType = typeof(sortType) === "string" ? sortType.trim() : ""
-    variables.sortType = (trimmedSortType=== "asc" || trimmedSortType === "desc") ? trimmedSortType : "asc" 
+//     const trimmedSortType = typeof(sortType) === "string" ? sortType.trim() : ""
+//     variables.sortType = (trimmedSortType=== "asc" || trimmedSortType === "desc") ? trimmedSortType : "asc" 
 
-    variables.sortBy = typeof(sortBy) === "string" && sortBy.trim() ? sortBy.trim() : "createdAt"
+//     variables.sortBy = typeof(sortBy) === "string" && sortBy.trim() ? sortBy.trim() : "createdAt"
 
-   if(typeof(query) === "string" && query.trim()){
-    variables.query = query.trim()
-   }
-   if(typeof(userId) === "string" && mongoose.Types.ObjectId.isValid(userId)){
-    variables.userId = new mongoose.Types.ObjectId(userId)
-   }
+//    if(typeof(query) === "string" && query.trim()){
+//     variables.query = query.trim()
+//    }
+//    if(typeof(userId) === "string" && mongoose.Types.ObjectId.isValid(userId)){
+//     variables.userId = new mongoose.Types.ObjectId(userId)
+//    }
 
-   const pipeline = []
-   //query , id, sort , paginate
-   if (variables.userId) {
-  pipeline.push({
-    $match: { owner: variables.userId }
-  });
+//    const pipeline = []
+//    //query , id, sort , paginate
+//    if (variables.userId) {
+//   pipeline.push({
+//     $match: { owner: variables.userId }
+//   });
 
-  if (variables.query) {
-    pipeline.push({
-      $match: {
-        $or: [
-          { title: { $regex: variables.query, $options: "i" } },
-          { description: { $regex: variables.query, $options: "i" } }
-        ]
-      }
-    });
-  }
+//   if (variables.query) {
+//     pipeline.push({
+//       $match: {
+//         $or: [
+//           { title: { $regex: variables.query, $options: "i" } },
+//           { description: { $regex: variables.query, $options: "i" } }
+//         ]
+//       }
+//     });
+//   }
 
-} else if (variables.query) {
-  pipeline.push({
-    $match: {
-      $or: [
-        { title: { $regex: variables.query, $options: "i" } },
-        { description: { $regex: variables.query, $options: "i" } }
-      ]
+// } else if (variables.query) {
+//   pipeline.push({
+//     $match: {
+//       $or: [
+//         { title: { $regex: variables.query, $options: "i" } },
+//         { description: { $regex: variables.query, $options: "i" } }
+//       ]
+//     }
+//   });
+// }
+
+//    pipeline.push({
+//     $sort:{
+//         [variables.sortBy]: variables.sortType === "asc" ? 1 : -1
+//     }
+//    })
+
+//    pipeline.push(
+//     {$skip:(variables.page-1)*variables.limit},
+//     {$limit: variables.limit}
+//    )
+//    pipeline.push({
+//         $lookup:{
+//             from: "users",
+//             localField: "owner",
+//             foreignField: "_id",
+//             as: "owner"
+//         }
+//     })
+//     pipeline.push({
+//         $unwind: "$owner"
+//     })
+//     pipeline.push({
+//         $project:{
+//             _id: 1,
+//             videoFile: 1,
+//             thumbnail: 1,
+//             title: 1,
+//             description: 1,
+//             duration: 1,
+//             views: 1,
+//             isPublished: 1,
+//             owner:{
+//                 _id: "$owner._id",
+//                 username: "$owner.username",
+//                 avatar: "$owner.avatar"
+//             }
+
+//         }
+//     })
+//    const videos = await Video.aggregate(pipeline)
+//    console.log(videos)
+//    res.status(200)
+//    .json(new ApiResponse(200,videos,"Fetched the videos successfully"))
+
+// })
+
+const getAllVideos = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
+    // TODO: get all videos based on query, sort, pagination
+    // NOTE: page & limit are strings from params and need int conversion to be used here in calcs
+    let pageValue = parseInt(page);
+    let limitValue = parseInt(limit);
+    let filter = new Object();
+    let normalizedSortType = sortType?.toLowerCase().trim();
+    let sortOptions = new Object();
+
+    if (userId && userId.trim()) {
+        filter.owner = userId;
     }
-  });
-}
 
-   pipeline.push({
-    $sort:{
-        [variables.sortBy]: variables.sortType === "asc" ? 1 : -1
+    if (query && query?.trim()) {
+        filter.$or = [
+            { title: { $regex: query, $options: "i" } },
+            { description: { $regex: query, $options: "i" } },
+        ];
     }
-   })
 
-   pipeline.push(
-    {$skip:(variables.page-1)*variables.limit},
-    {$limit: variables.limit}
-   )
-   pipeline.push({
-        $lookup:{
-            from: "users",
-            localField: "owner",
-            foreignField: "_id",
-            as: "owner"
-        }
-    })
-    pipeline.push({
-        $unwind: "$owner"
-    })
-    pipeline.push({
-        $project:{
-            _id: 1,
-            videoFile: 1,
-            thumbnail: 1,
-            title: 1,
-            description: 1,
-            duration: 1,
-            views: 1,
-            isPublished: 1,
-            owner:{
-                _id: "$owner._id",
-                username: "$owner.username",
-                avatar: "$owner.avatar"
+    // Incremental filter building implicitly handles the case when user provides both userId & query
+
+    if (sortBy?.trim() && normalizedSortType) {
+        const validSortFields = ["createdAt", "views", "duration"];
+
+        if (validSortFields.includes(sortBy)) {
+            if (normalizedSortType !== "asc" && normalizedSortType !== "desc") {
+                normalizedSortType = "asc";
             }
-
+            sortOptions[sortBy] = normalizedSortType === "asc" ? 1 : -1;
         }
-    })
-   const videos = await Video.aggregate(pipeline)
-   console.log(videos)
-   res.status(200)
-   .json(new ApiResponse(200,videos,"Fetched the videos successfully"))
+    } else if (sortBy?.trim()) {
+        const validSortFields = ["createdAt", "views", "duration"];
+        if (validSortFields.includes(sortBy)) {
+            sortOptions[sortBy] = -1;
+        }
+    } else if (normalizedSortType) {
+        if (normalizedSortType === "asc") {
+            sortOptions = { views: 1 };
+        }
+    } else {
+        sortOptions = { views: -1 };
+    }
 
-})
+    const totalMatchedVideoCount = await Video.countDocuments(filter);
+
+    const totalPages = Math.ceil(totalMatchedVideoCount / limitValue);
+
+    if (pageValue <= 0 || isNaN(pageValue)) pageValue = 1;
+    if (limitValue <= 0 || limitValue >= 1000 || isNaN(limitValue))
+        limitValue = 10;
+
+    if (pageValue > totalPages) {
+        throw new ApiError(400, "Out of range page requested!");
+    }
+    const currentPageVideos = await Video.find(filter)
+        .sort(sortOptions)
+        .skip((pageValue - 1) * limitValue)
+        .limit(limitValue);
+
+    if (!currentPageVideos.length) {
+        throw new ApiError(404, "No videos found!");
+    }
+
+    const pagination = {
+        currentPage: pageValue,
+        perPage: limitValue,
+        totalItems: totalMatchedVideoCount,
+        totalPages: totalPages,
+        hasPrevPage: pageValue > 1,
+        hasNextPage: pageValue < totalPages,
+    };
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                { videos: currentPageVideos, pagination: pagination },
+                "Videos fetched successfully"
+            )
+        );
+});
 
 const publishAVideo = asyncHandler(async (req, res) => {
     const videoPath = req.files.video[0].path

@@ -12,7 +12,7 @@ const verifyJWT = asyncHandler(async(req,res,next)=>{
     if(!tokenData){
         throw new ApiError(401,"Invalid Access Token")
     }
-    const user = await User.findById(tokenData._id)
+    const user = await User.findById(tokenData._id).select("-watchHistory")
     if(!user){
         throw new ApiError(401,"User not longer exists")
     }

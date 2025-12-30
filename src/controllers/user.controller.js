@@ -270,8 +270,7 @@ const UpdatUserCoverImage = asyncHandler(async(req,res)=>{
     userData.coverImagePublicId = coverImagePublicId
     userData.coverImage = coverImageUrl
     await userData.save({validateBeforeSave: false})
-    const isDeleted = await deleteMedia(oldCoverImage,"image")
-    console.log(isDeleted)
+    await deleteMedia(oldCoverImage,"image")
     res.status(200)
     .json(new ApiResponse(200,coverImageUrl,"Avatar updated successfully"))
 })
