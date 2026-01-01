@@ -367,7 +367,13 @@ const deleteVideoById = asyncHandler(async (req, res) => {
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
     const  {videoId} = req.params
+    if(!mongoose.Types.ObjectId.isValid(videoId)){
+        throw new ApiError(400,"Invalid VideoId")
+    }
     const videoDoc = await Video.findById(videoId)
+    if(!videoDoc){
+        throw new ApiError(404,"Video not found")
+    }
     if(!videoDoc.owner.equals(req.user._id)){
         throw new ApiError(401,"Unauthorized Access")
     }
