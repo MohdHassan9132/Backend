@@ -15,16 +15,17 @@ const uploadMedia = async(ImagePath)=>{
     } catch (error) {
         fs.unlinkSync(ImagePath)
         console.log(error?.message || error)
+        throw error
     }
 }
 
 const deleteMedia = async(imageId,resource_type)=>{
-    try {
-        const response = await v2.uploader.destroy(imageId,{resource_type: resource_type})
-        return response
-    } catch (error) {
-        console.log(error)
-    }
+        try {
+            const response = await v2.uploader.destroy(imageId,{resource_type: resource_type})
+            return response
+        } catch (error) {
+            console.log(error.message)
+        }
 }
 
 
