@@ -5,6 +5,8 @@ import { uploadMedia,deleteMedia } from '../utils/cloudinary.js'
 import {User} from '../models/user.model.js'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
+import fs from 'fs'
+ 
 
 const cookieOptions = {
     httpOnly: true,
@@ -35,7 +37,7 @@ const registerUser = asyncHandler(async(req,res)=>{
     //create the user in the db
     //return the response without sensitive fields
     const {username,email,fullName,password} = req.body
-    if([username,email,fullName,password].some(fields => !fields)){
+    if([username,email,fullName,password].some(fields => !fields || !fields.trim())){
         throw new ApiError(400,"All fields are required")
     }
 
@@ -46,46 +48,41 @@ const registerUser = asyncHandler(async(req,res)=>{
     if(isUser){
         throw new ApiError(409,"User already exists")
     }
+    
+    const avatar = req?.files?.avatar
 
-    const avatarPath = req.files?.avatar[0]?.path
-
-    if(!avatarPath){
+    if(!avatar || avatar.length === 0){
         throw new ApiError(400,"Avatar is required")
     }
-
-    const avatar = await uploadMedia(avatarPath)
-    const avatarPublicId = avatar.public_id
-    const avatarUrl = avatar.secure_url
-    if(!avatarPublicId || !avatarUrl){
-        throw new ApiError(500,"Avatar upload failed")
-    }
-
-    const coverImagePath = req.files?.coverImage[0]?.path
-    let coverImageUrl;
-    let coverImagePublicId;
-    
-    if(coverImagePath){
-        const coverImage = await uploadMedia(coverImagePath)
-        coverImageUrl = coverImage.secure_url
-        coverImagePublicId = coverImage.public_id
-        if(!coverImageUrl || !coverImagePublicId){
-            throw new ApiError(500,"CoverImage upload failed")
+    let avatarImage,uploadedCoverImage;
+ try {
+        avatarImage = await uploadMedia(avatar[0])
+        const coverImage = req?.files?.coverImage
+        if(coverImage && coverImage.length >=  1){
+            uploadedCoverImage = await uploadMedia(coverImage[0])
         }
+   
+        const user = await User.create({
+            username,email,fullName,password,coverImage: uploadedCoverImage?.secure_url,coverImagePublicId: uploadedCoverImage?.public_id,avatar: avatarImage.secure_url,avatarPublicId: avatarImage.public_id
+        })
+        
+        const userData = user.toObject()
+        delete userData.coverImagePublicId
+        delete userData.avatarPublicId
+        delete userData.password
+        delete userData.watchHistory
+        
+        res.status(201)
+        .json(new ApiResponse(201,userData,"User registered successfully"))
+    } catch (error) {
+        if(uploadedCoverImage?.public_id){
+            await deleteMedia(uploadedCoverImage.public_id,"image")
+        }
+        if(avatarImage?.public_id){
+            await deleteMedia(avatarImage.public_id,"image")
+        }
+        throw error
     }
-
-    const user = await User.create({
-        username,email,fullName,password,coverImage: coverImageUrl,coverImagePublicId,avatar: avatarUrl,avatarPublicId
-    })
-
-    const userData = user.toObject()
-    delete userData.coverImagePublicId
-    delete userData.avatarPublicId
-    delete userData.password
-    delete user.watchHistory
-
-    res.
-    status(200)
-    .json(new ApiResponse(200,userData,"User registered successfully"))
 })
 
 const loginUser = asyncHandler(async(req,res)=>{
@@ -98,24 +95,58 @@ const loginUser = asyncHandler(async(req,res)=>{
     //save the refresh in the doc
     //return the response
 
-    const {username,email,password} = req.body
+    const username = req.body.username 
+    const password = req.body.password
+    const email = req.body.email 
     if(!username && !email){
         throw new ApiError(400,"Email or username is required")
     }
-
+    let trimmedUsername,trimmedEmail;
+   if(username!==undefined && username!== null){
+        if(typeof username === "string"){
+            trimmedUsername = username.trim().toLowerCase()
+        }else{
+            throw new ApiError(400,"username must be string")
+        }
+        if(!trimmedUsername){
+            throw new ApiError(400,"Username cannot be empty")
+        }
+   }
+   if(email !== undefined && email !== null){
+        if(typeof email === "string"){
+            trimmedEmail = email.trim().toLowerCase()
+        }else{
+            throw new ApiError(400,"email must be string")
+        }
+        if(!trimmedEmail){
+            throw new ApiError(400,"Email cannot be empty")
+        }
+   }
+    let trimmedPassword;
     if(!password){
-        throw new ApiError(400,"Password is required")
+        throw new ApiError(400,"password is required")
+    }
+    if(typeof password === "string"){
+        trimmedPassword = password.trim()
+        if(!trimmedPassword){
+            throw new ApiError(400,"Password cannot be empty")
+        }
+    }else{
+        throw new ApiError(400,"Password must be string")
     }
 
     const userData = await User.findOne({
-        $or: [{username},{email}]
+        $or: [
+            {username: trimmedUsername},
+            {email: trimmedEmail}
+        ]
     })
 
     if(!userData){
         throw new ApiError(404,"No User found")
     }
 
-    const isCorrect = await userData.isPasswordCorrect(password)
+    const isCorrect = await userData.isPasswordCorrect(trimmedPassword)
 
     if(!isCorrect){
         throw new ApiError(401,"Invalid Credentials")
@@ -159,7 +190,6 @@ const getUser = asyncHandler(async(req,res)=>{
     delete user.coverImagePublicId
     delete user.refreshToken
     delete user.password
-    delete user.watchHistory
     res.status(200)
     .json(new ApiResponse(200,user,"User fetched successfully"))
 })
@@ -172,8 +202,12 @@ const refreshAccessToken = asyncHandler(async(req,res)=>{
         throw new ApiError(401,"Unauthorized Access")
     }
     const tokenData = jwt.verify(token,process.env.REFRESH_TOKEN_SECRET)
-    if(!tokenData){
-        throw new ApiError(401,"Invalid refresh token")
+    const user = await User.findById(tokenData._id)
+    if(!user){
+        throw new ApiError(404,"User not found")
+    }
+    if(user.refreshToken !== token){
+        throw new ApiError(401,"token mismatch")
     }
     const {refreshToken,accessToken} = await refreshAccessAndRefreshToken(tokenData._id)
     res.status(200)
@@ -195,8 +229,34 @@ const updateUserDetails = asyncHandler(async(req,res)=>{
         throw new ApiError(400,"At least one field is required")
     }
     const updateDetails = {}
-    if(username !== undefined){updateDetails.username = username}
-    if(email !== undefined){updateDetails.email = email}
+    let trimmedEmail,trimmedUsername
+    if(username !== undefined && username!= null){
+        if(typeof username === "string"){
+            trimmedUsername = username.trim().toLowerCase()
+        }else{
+            throw new ApiError(400,"Username must be string")
+        }
+        if(!trimmedUsername){
+            throw new ApiError(400,"Username cannot be empty")
+        }else{
+            updateDetails.username = trimmedUsername
+        }
+    }
+    if(email !== undefined && email!== null){
+        if(typeof email === "string"){
+            trimmedEmail = email.trim().toLowerCase()
+        }else{
+            throw new ApiError(400,"email must be string")
+        }
+        if(!trimmedEmail){
+            throw new ApiError(400,"Email cannot be empty")
+        }else{
+            updateDetails.email = trimmedEmail
+        }
+    }
+    if(Object.keys(updateDetails).length === 0){
+        throw new ApiError(400,"No valid field to updated")
+    }
     const updatedUser = await User.findByIdAndUpdate(userData._id,updateDetails,{new: true})
     if(!updatedUser){
         throw new ApiError(404,"user not found")
@@ -221,58 +281,81 @@ const changeCurrentPassword = asyncHandler(async(req,res)=>{
     if(!currentPassword || !newPassword){
         throw new ApiError(400,"All fields are required")
     }
-    const isCorrect = await userData.isPasswordCorrect(currentPassword)
-    if(!isCorrect){
-        throw new ApiError(401,"Passowrd is incorrect")
+    let currentTrimmedPassword,newTrimmedPassowrd;
+    if(typeof currentPassword === "string" && typeof newPassword === "string"){
+        currentTrimmedPassword = currentPassword.trim()
+        newTrimmedPassowrd = newPassword.trim()
+        if(!newTrimmedPassowrd||!currentTrimmedPassword){
+            throw new ApiError(400,"Passwords cannot be empty")
+        }
+    }else{
+        throw new ApiError(400,"Current password and new passowrd must be string")
     }
-    userData.password = newPassword
-    await userData.save({validateBeforeSave: false})
+    if(currentTrimmedPassword === newTrimmedPassowrd){
+        throw new ApiError(400,"New password must be different from previous")
+    }
+    const isCorrect = await userData.isPasswordCorrect(currentTrimmedPassword)
+    if(!isCorrect){
+        throw new ApiError(403,"Passowrd is incorrect")
+    }
+    userData.password = newTrimmedPassowrd
+    await userData.save()
     res.status(200)
     .json(new ApiResponse(200,null,"User password updated successfully"))
-
 })
 
 const UpdateUserAvatar = asyncHandler(async(req,res)=>{
     const userData = req.user
-    const avatarPath = req.file.path;
-    if(!avatarPath){
+    const avatar = req?.file
+    if(!avatar){
         throw new ApiError(400,"Avatar is required")
     }
-    const avatar = await uploadMedia(avatarPath)
-    const avatarPublicId = avatar.public_id
-    const avatarUrl = avatar.secure_url
-    if(!avatarPublicId || !avatarUrl){
-        throw new ApiError(500,"Avatar upload failed")
+    let newAvatar;
+    try {
+        newAvatar = await uploadMedia(avatar)
+        const oldAvatar = userData.avatarPublicId
+        userData.avatarPublicId = newAvatar.public_id
+        userData.avatar = newAvatar.secure_url
+        await userData.save()
+        if(oldAvatar){
+            await deleteMedia(oldAvatar,"image")
+        }
+        res.status(200)
+        .json(new ApiResponse(200,newAvatar.secure_url,"Avatar updated successfully"))
+    } catch (error) {
+        if(newAvatar?.public_id){
+            await deleteMedia(newAvatar.public_id,"image")
+        }
+        throw error
     }
-    const oldAvatar = userData.avatarPublicId
-    userData.avatarPublicId = avatarPublicId
-    userData.avatar = avatarUrl
-    await userData.save({validateBeforeSave: false})
-    const isDeleted = await deleteMedia(oldAvatar,"image")
-    console.log(isDeleted)
-    res.status(200)
-    .json(new ApiResponse(200,avatarUrl,"Avatar updated successfully"))
 })
 
-const UpdatUserCoverImage = asyncHandler(async(req,res)=>{
+const updatUserCoverImage = asyncHandler(async(req,res)=>{
     const userData = req.user
-    const coverImagePath = req.file.path;
-    if(!coverImagePath){
+    const coverImage = req?.file
+    if(!coverImage){
         throw new ApiError(400,"coverImage is required")
     }
-    const coverImage = await uploadMedia(coverImagePath)
-    const coverImagePublicId = coverImage.public_id
-    const coverImageUrl = coverImage.secure_url
-    if(!coverImagePublicId || !coverImageUrl){
-        throw new ApiError(500,"CoverImage upload failed")
+    let newCoverImage
+    try {
+        newCoverImage = await uploadMedia(coverImage)
+        const oldCoverImage = userData.coverImagePublicId
+        userData.coverImagePublicId = newCoverImage.public_id
+        userData.coverImage = newCoverImage.secure_url
+        await userData.save()
+        if(oldCoverImage){
+            await deleteMedia(oldCoverImage,"image")
+        }
+        res.status(200)
+        .json(new ApiResponse(200,newCoverImage.secure_url,"CoverImage updated successfully"))
+    } catch (error) {
+        if(newCoverImage?.public_id){
+            await deleteMedia(newCoverImage.public_id,"image")
+        }
+        throw error
     }
-    const oldCoverImage = userData.coverImagePublicId
-    userData.coverImagePublicId = coverImagePublicId
-    userData.coverImage = coverImageUrl
-    await userData.save({validateBeforeSave: false})
-    await deleteMedia(oldCoverImage,"image")
     res.status(200)
-    .json(new ApiResponse(200,coverImageUrl,"Avatar updated successfully"))
+    .json(new ApiResponse(200,coverImage,"Coverimage recieved"))
 })
 
 const getUserChannelProfile = asyncHandler(async(req,res)=>{
@@ -394,4 +477,4 @@ const getUserWatchHistory = asyncHandler(async(req,res)=>{
     .json(new ApiResponse(200,userWatchHistory[0],"User watch history fetched successfully"))
 })
 
-export{registerUser,loginUser,logoutUser,getUser,refreshAccessToken,updateUserDetails,changeCurrentPassword,UpdateUserAvatar,UpdatUserCoverImage,getUserChannelProfile,getUserWatchHistory}
+export{registerUser,loginUser,logoutUser,getUser,refreshAccessToken,updateUserDetails,changeCurrentPassword,UpdateUserAvatar,updatUserCoverImage,getUserChannelProfile,getUserWatchHistory}

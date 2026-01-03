@@ -7,6 +7,7 @@ import {deleteMedia, uploadMedia} from '../utils/cloudinary.js'
 
 const createPlaylist = asyncHandler(async (req, res) => {
     //TODO: create playlist
+    // await Playlist.collection.dropIndex("videos_1");
     const {name, description} = req.body
     const playlistCoverPath = req?.file?.path
     const userId = req.user._id
@@ -57,7 +58,7 @@ const getUserPlaylists = asyncHandler(async (req, res) => {
     }
     const playlists = await Playlist.find({
         owner: userId
-    }).select("-playlistCoverPublicId")
+    }).select("-playlistCoverPublicId").populate("owner","avatarUrl username")
     if(!playlists){
         throw new ApiError(404,"Playlists not found")
     }

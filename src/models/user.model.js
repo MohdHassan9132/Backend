@@ -6,12 +6,14 @@ const userSchema = new Schema({
     username:{
         type: String,
         required: true,
-        unique: true
+        unique: true,
+        lowercase: true
     },
     email:{
         type: String,
         required: true,
-        unique: true
+        unique: true,
+        lowercase: true
     },
     fullName:{
         type: String,
@@ -29,8 +31,7 @@ const userSchema = new Schema({
         type: String
     },
     coverImagePublicId:{
-        type: String,
-        required: true
+        type: String
     },
     password:{
         type: String,

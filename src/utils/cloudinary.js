@@ -1,5 +1,6 @@
 import { v2 } from "cloudinary";
 import fs from 'fs'
+import { ApiError } from "./api_error.js";
 
 v2.config({
     api_key: process.env.CLOUDINARY_API_KEY,
@@ -7,21 +8,41 @@ v2.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME
 })
 
-const uploadMedia = async(ImagePath)=>{
+const MAX_IMAGE_SIZE = 10*1024*1024
+const MAX_VIDEO_SIZE = 100*1024*1024
+
+const uploadMedia = async(media)=>{
     try {
-        const response = await v2.uploader.upload(ImagePath,{resource_type: "auto"})
-        fs.unlinkSync(ImagePath)
-        return response
+        if(media.mimetype.startsWith("image")){
+            if(media.size < MAX_IMAGE_SIZE){
+                   const response = v2.uploader.upload(media.path,{resource_type: "image"})
+                   fs.unlinkSync(media.path)
+                   return response
+            }else{
+                fs.unlinkSync(media.path)
+                throw new ApiError(400,"Image must be less than 10mb")
+            }
+        }
+        if(media.mimetype.startsWith("video")){
+            if(media.size < MAX_VIDEO_SIZE){
+                const response = v2.uploader.upload(media.path,{resource_type: "video"})
+                fs.unlinkSync(media.path)
+                return response
+            }else{
+                fs.unlinkSync(media.path)
+                throw new ApiError(400,"Video must be less than 100mb")
+            }
+        }
     } catch (error) {
-        fs.unlinkSync(ImagePath)
-        console.log(error?.message || error)
-        throw error
+        fs.unlinkSync(media.path)
+        console.log(error.message|| error)
+        throw new ApiError(503,"Media service unavailable")
     }
 }
 
-const deleteMedia = async(imageId,resource_type)=>{
+const deleteMedia = async(mediaId,resource_type)=>{
         try {
-            const response = await v2.uploader.destroy(imageId,{resource_type: resource_type})
+            const response = await v2.uploader.destroy(mediaId,{resource_type: resource_type})
             return response
         } catch (error) {
             console.log(error.message)

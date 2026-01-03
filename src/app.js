@@ -28,5 +28,5 @@ app.use("/api/v1/tweet",tweetRouter)
 app.use("/api/v1/comment",commentRouter)
 app.use("/api/v1/like",likeRouter)
 app.use("/api/v1/playlist",playlistRouter)
-// app.use(errorMiddleware)
+app.use(errorMiddleware)
 export {app}
