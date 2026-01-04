@@ -8,236 +8,208 @@ import mongoose from "mongoose"
 
 
 
-// const getAllVideos = asyncHandler(async (req, res) => {
-//     const { page , limit , query, sortBy, sortType, userId } = req.query
-//     //TODO: get all videos based on query, sort, pagination
-//     const variables = {}
-//     const parsedPage = Number(page)
-//     variables.page =  Number.isFinite(parsedPage) && parsedPage>=1 ? parsedPage : 1
-    
-//     const parsedLimit = Number(limit)
-//     variables.limit = Number.isFinite(parsedLimit) && parsedLimit>=1 ? parsedLimit : 10
-
-//     const trimmedSortType = typeof(sortType) === "string" ? sortType.trim() : ""
-//     variables.sortType = (trimmedSortType=== "asc" || trimmedSortType === "desc") ? trimmedSortType : "asc" 
-
-//     variables.sortBy = typeof(sortBy) === "string" && sortBy.trim() ? sortBy.trim() : "createdAt"
-
-//    if(typeof(query) === "string" && query.trim()){
-//     variables.query = query.trim()
-//    }
-//    if(typeof(userId) === "string" && mongoose.Types.ObjectId.isValid(userId)){
-//     variables.userId = new mongoose.Types.ObjectId(userId)
-//    }
-
-//    const pipeline = []
-//    //query , id, sort , paginate
-//    if (variables.userId) {
-//   pipeline.push({
-//     $match: { owner: variables.userId }
-//   });
-
-//   if (variables.query) {
-//     pipeline.push({
-//       $match: {
-//         $or: [
-//           { title: { $regex: variables.query, $options: "i" } },
-//           { description: { $regex: variables.query, $options: "i" } }
-//         ]
-//       }
-//     });
-//   }
-
-// } else if (variables.query) {
-//   pipeline.push({
-//     $match: {
-//       $or: [
-//         { title: { $regex: variables.query, $options: "i" } },
-//         { description: { $regex: variables.query, $options: "i" } }
-//       ]
-//     }
-//   });
-// }
-
-//    pipeline.push({
-//     $sort:{
-//         [variables.sortBy]: variables.sortType === "asc" ? 1 : -1
-//     }
-//    })
-
-//    pipeline.push(
-//     {$skip:(variables.page-1)*variables.limit},
-//     {$limit: variables.limit}
-//    )
-//    pipeline.push({
-//         $lookup:{
-//             from: "users",
-//             localField: "owner",
-//             foreignField: "_id",
-//             as: "owner"
-//         }
-//     })
-//     pipeline.push({
-//         $unwind: "$owner"
-//     })
-//     pipeline.push({
-//         $project:{
-//             _id: 1,
-//             videoFile: 1,
-//             thumbnail: 1,
-//             title: 1,
-//             description: 1,
-//             duration: 1,
-//             views: 1,
-//             isPublished: 1,
-//             owner:{
-//                 _id: "$owner._id",
-//                 username: "$owner.username",
-//                 avatar: "$owner.avatar"
-//             }
-
-//         }
-//     })
-//    const videos = await Video.aggregate(pipeline)
-//    console.log(videos)
-//    res.status(200)
-//    .json(new ApiResponse(200,videos,"Fetched the videos successfully"))
-
-// })
-
 const getAllVideos = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
-    // TODO: get all videos based on query, sort, pagination
-    // NOTE: page & limit are strings from params and need int conversion to be used here in calcs
-    let pageValue = parseInt(page);
-    let limitValue = parseInt(limit);
-    let filter = new Object();
-    let normalizedSortType = sortType?.toLowerCase().trim();
-    let sortOptions = new Object();
+    const { page, limit, query, sort, userId } = req.query
 
-    if (userId && userId.trim()) {
-        filter.owner = userId;
+    const variables = {}
+
+    const parsedPage = Number(page)
+    variables.page = Number.isFinite(parsedPage) && parsedPage >= 1 ? parsedPage : 1
+
+    const parsedLimit = Number(limit)
+    variables.limit = Number.isFinite(parsedLimit) && parsedLimit >= 1 ? parsedLimit : 10
+
+    if (typeof query === "string" && query.trim()) {
+        variables.query = query.trim()
     }
 
-    if (query && query?.trim()) {
-        filter.$or = [
-            { title: { $regex: query, $options: "i" } },
-            { description: { $regex: query, $options: "i" } },
-        ];
+    if (typeof userId === "string" && mongoose.Types.ObjectId.isValid(userId)) {
+        variables.userId = new mongoose.Types.ObjectId(userId)
     }
 
-    // Incremental filter building implicitly handles the case when user provides both userId & query
+    const pipeline = []
 
-    if (sortBy?.trim() && normalizedSortType) {
-        const validSortFields = ["createdAt", "views", "duration"];
+    if (variables.userId) {
+        pipeline.push({ $match: { owner: variables.userId } })
 
-        if (validSortFields.includes(sortBy)) {
-            if (normalizedSortType !== "asc" && normalizedSortType !== "desc") {
-                normalizedSortType = "asc";
-            }
-            sortOptions[sortBy] = normalizedSortType === "asc" ? 1 : -1;
+        if (!req.user?._id?.equals(variables.userId)) {
+            pipeline.push({ $match: { isPublished: true } })
         }
-    } else if (sortBy?.trim()) {
-        const validSortFields = ["createdAt", "views", "duration"];
-        if (validSortFields.includes(sortBy)) {
-            sortOptions[sortBy] = -1;
-        }
-    } else if (normalizedSortType) {
-        if (normalizedSortType === "asc") {
-            sortOptions = { views: 1 };
+
+        if (variables.query) {
+            pipeline.push({
+                $match: {
+                    $or: [
+                        { title: { $regex: variables.query, $options: "i" } },
+                        { description: { $regex: variables.query, $options: "i" } }
+                    ]
+                }
+            })
         }
     } else {
-        sortOptions = { views: -1 };
+        pipeline.push({ $match: { isPublished: true } })
+
+        if (variables.query) {
+            pipeline.push({
+                $match: {
+                    $or: [
+                        { title: { $regex: variables.query, $options: "i" } },
+                        { description: { $regex: variables.query, $options: "i" } }
+                    ]
+                }
+            })
+        }
     }
 
-    const totalMatchedVideoCount = await Video.countDocuments(filter);
+    const normalizedSort = typeof sort === "string" ? sort.trim().toLowerCase() : ""
+    let sortStage
 
-    const totalPages = Math.ceil(totalMatchedVideoCount / limitValue);
-
-    if (pageValue <= 0 || isNaN(pageValue)) pageValue = 1;
-    if (limitValue <= 0 || limitValue >= 1000 || isNaN(limitValue))
-        limitValue = 10;
-
-    if (pageValue > totalPages) {
-        throw new ApiError(400, "Out of range page requested!");
-    }
-    const currentPageVideos = await Video.find(filter)
-        .sort(sortOptions)
-        .skip((pageValue - 1) * limitValue)
-        .limit(limitValue);
-
-    if (!currentPageVideos.length) {
-        throw new ApiError(404, "No videos found!");
+    if (normalizedSort === "latest") {
+        sortStage = { createdAt: -1 }
+    } else if (normalizedSort === "oldest") {
+        sortStage = { createdAt: 1 }
+    } else {
+        sortStage = { views: -1 }
     }
 
-    const pagination = {
-        currentPage: pageValue,
-        perPage: limitValue,
-        totalItems: totalMatchedVideoCount,
-        totalPages: totalPages,
-        hasPrevPage: pageValue > 1,
-        hasNextPage: pageValue < totalPages,
-    };
-    return res
-        .status(200)
-        .json(
-            new ApiResponse(
-                200,
-                { videos: currentPageVideos, pagination: pagination },
-                "Videos fetched successfully"
-            )
-        );
-});
+    pipeline.push({ $sort: sortStage })
 
-const publishAVideo = asyncHandler(async (req, res) => {
-    const videoPath = req.files.video[0].path
-    if(!videoPath){
-        throw new ApiError(404,"Video file is required")
-    }
-    
-    const thumbnailPath = req.files.thumbnail[0].path
-    if(!thumbnailPath){
-        throw new ApiError(404,"Thumbnail is required")
-    }
-
-    const { title, description} = req.body
-    if(!title){
-        throw new ApiError(404,"Title is required")
-    }
-
-    const video = await uploadMedia(videoPath)
-
-    const videoPublicId = video.public_id
-    const videoSecureUrl = video.secure_url
-
-    if(!videoPublicId || !videoSecureUrl){
-        throw new ApiError(500,"Video Upload failed")
-    }
-    
-    const thumbnail = await uploadMedia(thumbnailPath)
-
-    const thumbnailPublicId = thumbnail.public_id
-    const thumbnailSecureUrl = thumbnail.secure_url
-    if(!thumbnailPublicId || !thumbnailSecureUrl){
-        throw new ApiError(500,"Thumbnail upload failed")
-    }
-    const videoDoc = await Video.create({videoFile: videoSecureUrl,videoPublicId,thumbnail: thumbnailSecureUrl, thumbnailPublicId,title,description,owner: req.user._id,duration: video.duration
+    pipeline.push({
+        $facet: {
+            metadata: [{ $count: "totalItems" }],
+            data: [
+                { $skip: (variables.page - 1) * variables.limit },
+                { $limit: variables.limit },
+                {
+                    $lookup: {
+                        from: "users",
+                        localField: "owner",
+                        foreignField: "_id",
+                        as: "owner"
+                    }
+                },
+                { $unwind: "$owner" },
+                {
+                    $project: {
+                        _id: 1,
+                        videoFile: 1,
+                        thumbnail: 1,
+                        title: 1,
+                        description: 1,
+                        duration: 1,
+                        views: 1,
+                        isPublished: 1,
+                        owner: {
+                            _id: "$owner._id",
+                            username: "$owner.username",
+                            avatar: "$owner.avatar"
+                        }
+                    }
+                }
+            ]
+        }
     })
 
-    if(!videoDoc){
-        throw new ApiError(500,"Error while creating the video doc")
+    const result = await Video.aggregate(pipeline)
+
+    const totalItems = result[0].metadata[0]?.totalItems || 0
+    const totalPages = Math.ceil(totalItems / variables.limit)
+
+    const pagination = {
+        currentPage: variables.page,
+        perPage: variables.limit,
+        totalItems,
+        totalPages,
+        hasPrevPage: variables.page > 1,
+        hasNextPage: variables.page < totalPages
     }
-    res.status(201)
-    .json(new ApiResponse(201,videoDoc,"Video published successfully"))
-    
+
+    res.status(200).json(
+        new ApiResponse(
+            200,
+            { videos: result[0].data, pagination },
+            "Fetched the videos successfully"
+        )
+    )
+})
+
+
+
+const publishAVideo = asyncHandler(async (req, res) => {
+    const { title, description} = req.body
+    let trimmedTitle;
+    if(title !== undefined && title !== null){
+        if(typeof title === "string"){
+            trimmedTitle = title.trim()
+            if(!trimmedTitle){
+                throw new ApiError(400,"Title cannot be empty")
+            }
+        }else{
+            throw new ApiError(400,"Title must be string")
+        }
+    }else{
+        throw new ApiError(400,"Title is required")
+    }
+    let trimmedDescription;
+    if(description !== null && description !== undefined){
+        if(typeof description === "string"){
+            trimmedDescription = description.trim()
+            if(!trimmedDescription){
+                throw new ApiError(400,"description cannot be empty")
+            }
+        }else{
+            throw new ApiError(400,"Description must be string")
+        }
+    }
+
+    const video = req?.files?.video
+    if(!video || video.length === 0){
+        throw new ApiError(400,"Video file is required")
+    }
+    const thumbnail = req?.files?.thumbnail
+    if(!thumbnail || thumbnail.length === 0){
+        throw new ApiError(400,"Thumbnail is required")
+    }
+    let videoFile,thumbnailFile;
+    try {
+        videoFile = await uploadMedia(video[0])
+        thumbnailFile = await uploadMedia(thumbnail[0])
+
+        const videoDoc = await Video.create({videoFile: videoFile.secure_url,videoPublicId: videoFile.public_id,thumbnail: thumbnailFile.secure_url, thumbnailPublicId: thumbnailFile.public_id,title: trimmedTitle,description: trimmedDescription,owner: req.user._id,duration: videoFile.duration
+        })
+
+        if(!videoDoc){
+            throw new ApiError(500,"Error while creating the video doc")
+        }
+        const secureVideo = videoDoc.toObject()
+        delete secureVideo.videoPublicId
+        delete secureVideo.thumbnailPublicId
+        res.status(201)
+        .json(new ApiResponse(201,secureVideo,"Video published successfully"))
+
+    } catch (error) {
+        if(thumbnailFile?.public_id){
+            await deleteMedia(thumbnailFile.public_id,"image")
+        }
+        if(videoFile?.public_id){
+            await deleteMedia(videoFile.public_id,"video")
+        }
+        throw error
+    }
 })
 
 const getVideoById = asyncHandler(async (req, res) => {
-    const  videoId  = new mongoose.Types.ObjectId(req.params.videoId)
+    const {videoId} = req.params
+    if(!videoId){
+        throw new ApiError(400,"VideoId is required")
+    }
+    if(!mongoose.Types.ObjectId.isValid(videoId)){
+        throw new ApiError(400,"Invalid VideoId")
+    }
     const userId = req.user._id
     const video = await Video.aggregate([
         {
-            $match: {_id: videoId}
+            $match: {_id: new mongoose.Types.ObjectId(videoId)}
         },
         {
             $lookup:{
@@ -301,72 +273,128 @@ const getVideoById = asyncHandler(async (req, res) => {
 })
 
 const updateVideo = asyncHandler(async (req, res) => {
-    const {videoId}  = req.params
-    if(!videoDoc.owner.equals(req.user._id)){
-        throw new ApiError(401,"Unauthorized access")
-    }
-    const videoDoc = await Video.findById(videoId)
     //TODO: update video details like title, description, thumbnail
+    const {videoId} = req.params
+    if(!videoId){
+        throw new ApiError(400,"VideoId is required")
+    }
+    if(!mongoose.Types.ObjectId.isValid(videoId)){
+        throw new ApiError(400,"Invalid VideoId")
+    }
+
     const {title , description} = req.body
-    const thumbnailPath = req.file?.path
-    if(!title && !description && !thumbnailPath){
+    const thumbnail = req?.file
+    if(!title && !description && !thumbnail){
         throw new ApiError(400,"At least one of the field is required")
     }
-    if(thumbnailPath){
-        const newThumbnail = await uploadMedia(thumbnailPath)
-        if(!newThumbnail){
-            throw new ApiError(500,"Thumbnail upload failed")
+    let trimmedTitle;
+    if(title !== null && title !== undefined){
+        if(typeof title === "string"){
+            trimmedTitle = title.trim()
+            if(!trimmedTitle){
+                throw new ApiError(400,"Title cannot be empty")
+            }
+        }else{
+            throw new ApiError(400,"Title must be string")
         }
-        if(videoDoc.thumbnailPublicId){
-            await deleteMedia(videoDoc.thumbnailPublicId,"image")
+    }
+
+        let trimmedDescription;
+    if(description !== null && description !== undefined){
+        if(typeof description === "string"){
+            trimmedDescription = description.trim()
+            if(!trimmedDescription){
+                throw new ApiError(400,"Description cannot be empty")
+            }
+        }else{
+            throw new ApiError(400,"Desciption must be string")
         }
-        const newThumbnailUrl = newThumbnail.secure_url
-        const newThumbnailPublicId = newThumbnail.public_id
-        videoDoc.thumbnail = newThumbnailUrl
-        videoDoc.thumbnailPublicId = newThumbnailPublicId
     }
-    if(title!== "" && title !== undefined){
-        videoDoc.title = title
+    let newThumbnail;
+    try {
+        const videoDoc = await Video.findById(videoId)
+        if(!videoDoc){
+            throw new ApiError(404,"Video not found")
+        }
+            
+        if(!videoDoc.owner.equals(req.user._id)){
+            throw new ApiError(403,"Forbidden request")
+        }
+
+        if(thumbnail){
+            newThumbnail = await uploadMedia(thumbnail)
+        }
+        if(trimmedDescription){
+            videoDoc.description = trimmedDescription
+        }
+        if(trimmedTitle){
+            videoDoc.title = trimmedTitle
+        }
+        let oldThumbnail;
+        if(newThumbnail){
+            oldThumbnail = videoDoc.thumbnailPublicId
+            videoDoc.thumbnailPublicId = newThumbnail.public_id
+            videoDoc.thumbnail = newThumbnail.secure_url
+        }
+        await videoDoc.save()
+        if(newThumbnail){
+            await deleteMedia(oldThumbnail,"image")
+        }
+        const video = videoDoc.toObject()
+        delete video.videoPublicId
+        delete video.thumbnailPublicId
+        res.status(200)
+        .json(new ApiResponse(200,video,"Video updated successfully"))
+    } catch (error) {
+        if(newThumbnail?.public_id){
+            await deleteMedia(newThumbnail.public_id,"image")
+        }
+        throw error
     }
-    if(description!== "" && description!== undefined){
-        videoDoc.description = description
-    }
-    await videoDoc.save({validateBeforeSave: false})
-
-    const video = videoDoc.toObject()
-    delete video.thumbnailPublicId
-    delete video.videoPublicId
-
-    res.status(200)
-    .json(new ApiResponse(200,video,"Video updated successfully"))
-    
-
 })
 
 const deleteVideoById = asyncHandler(async (req, res) => {
     const {videoId} = req.params
-    const videoDoc = await Video.findById(videoId)
-    if(!videoDoc){
-        throw new ApiError(404,"Video not found")
+    if(!videoId){
+        throw new ApiError(400,"VideoId is required")
     }
-    if(videoDoc.owner.toString()!== req.user._id.toString()){
-        throw new ApiError(401,"Unauthorized Access")
+    if(!mongoose.Types.ObjectId.isValid(videoId)){
+        throw new ApiError(400,"Invalid VideoId")
     }
-    await deleteMedia(videoDoc.thumbnailPublicId,"image")
-    await deleteMedia(videoDoc.videoPublicId,"video")
-    await User.updateMany(
-        {watchHistory: videoDoc._id},
-        {$pull: {watchHistory: videoDoc._id}}
-    )
-    await videoDoc.deleteOne()
-
-    res.status(200)
-    .json(new ApiResponse(200,null,"Video deleted successfully"))
+    let videoDoc
+    try {
+        videoDoc = await Video.findOneAndDelete({
+            _id: videoId,
+            owner: req.user._id
+        })
+        if(!videoDoc){
+            throw new ApiError(404,"Video not found")
+        }
+        await deleteMedia(videoDoc.thumbnailPublicId,"image")
+        await deleteMedia(videoDoc.videoPublicId,"video")
+        await User.updateMany(
+            {watchHistory: videoDoc._id},
+            {$pull: {watchHistory: videoDoc._id}}
+        )
+        res.status(200)
+        .json(new ApiResponse(200,null,"Video deleted successfully"))
+    } catch (error) {
+        if(videoDoc?.thumbnailPublicId){
+            await deleteMedia(videoDoc.thumbnailPublicId,"image")
+        }
+        if(videoDoc?.videoPublicId){
+            await deleteMedia(videoDoc.videoPublicId,"video")
+        }
+        throw error
+    }
     
 })
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
     const  {videoId} = req.params
+    if(!videoId){
+        throw new ApiError(400,"VideoId is required")
+    }
     if(!mongoose.Types.ObjectId.isValid(videoId)){
         throw new ApiError(400,"Invalid VideoId")
     }
@@ -375,19 +403,17 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
         throw new ApiError(404,"Video not found")
     }
     if(!videoDoc.owner.equals(req.user._id)){
-        throw new ApiError(401,"Unauthorized Access")
+        throw new ApiError(403,"Forbidden request")
     }
-
     if(videoDoc.isPublished === true){
         videoDoc.isPublished = false
     }else{
         videoDoc.isPublished = true
     }
-    await videoDoc.save({validateBeforeSave: false})
-
+    await videoDoc.save()
     res.status(200)
     .json(new ApiResponse(200,{isPublished: videoDoc.isPublished},"Video status change successfully"))
-    
+
 })
 
 export {

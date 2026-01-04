@@ -15,28 +15,30 @@ const uploadMedia = async(media)=>{
     try {
         if(media.mimetype.startsWith("image")){
             if(media.size < MAX_IMAGE_SIZE){
-                   const response = v2.uploader.upload(media.path,{resource_type: "image"})
-                   fs.unlinkSync(media.path)
+                   const response = await v2.uploader.upload(media.path,{resource_type: "image"})
                    return response
             }else{
-                fs.unlinkSync(media.path)
                 throw new ApiError(400,"Image must be less than 10mb")
             }
         }
         if(media.mimetype.startsWith("video")){
             if(media.size < MAX_VIDEO_SIZE){
-                const response = v2.uploader.upload(media.path,{resource_type: "video"})
-                fs.unlinkSync(media.path)
+                const response = await v2.uploader.upload(media.path,{resource_type: "video"})
                 return response
             }else{
-                fs.unlinkSync(media.path)
                 throw new ApiError(400,"Video must be less than 100mb")
             }
         }
     } catch (error) {
-        fs.unlinkSync(media.path)
-        console.log(error.message|| error)
-        throw new ApiError(503,"Media service unavailable")
+          if (error instanceof ApiError) {
+            throw error
+        }
+        console.log(error.message || error)
+        throw new ApiError(503, "Media service unavailable")
+    }finally{
+        if(fs.existsSync(media.path)){
+            fs.unlinkSync(media.path)
+        }
     }
 }
 
