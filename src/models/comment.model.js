@@ -15,4 +15,9 @@ const commentSchema = new Schema({
     }
 },{timestamps: true})
 
+commentSchema.index(
+    {video:1,owner:1},
+    {unique:true,partialFilterExpression:{video:{$exists:true}}}
+)
+
 export const Comment = mongoose.model("Comment",commentSchema)
