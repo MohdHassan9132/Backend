@@ -3,19 +3,29 @@ import { Subscription } from "../models/subscription.model.js"
 import {ApiError} from '../utils/api_error.js'
 import {ApiResponse} from '../utils/api_response.js'
 import {asyncHandler} from '../utils/async_handler.js'
+import { User } from "../models/user.model.js"
+
 
 const toggleSubscription = asyncHandler(async (req, res) => {
     const {channelId} = req.params
     if(!channelId){
-        throw new ApiError(404,"Channel is neccessary")
+        throw new ApiError(400,"ChannelId is neccessary")
+    }
+    if(!mongoose.Types.ObjectId.isValid(channelId)){
+        throw new ApiError(400,"Invalid ChannelId")
     }
     const userId = req.user._id
-    console.log(userId,channelId)
-    const subscriber = await Subscription.findOne({
-        channel: new mongoose.Types.ObjectId(channelId),
-        subscriber: new mongoose.Types.ObjectId(userId)
+    const isExist = await User.exists({
+        _id: channelId
     })
-    console.log(subscriber)
+    console.log(isExist)
+    if(!isExist){
+        throw new ApiError(404,"Channel Not found")
+    }
+    const subscriber = await Subscription.findOne({
+        channel: channelId,
+        subscriber: userId
+    })
     if(!subscriber){
         const newSubscriber = await Subscription.create({channel: channelId,subscriber: userId})
         console.log(newSubscriber)
@@ -34,16 +44,21 @@ const toggleSubscription = asyncHandler(async (req, res) => {
 // controller to return subscriber list of a channel
 const getUserChannelSubscribers = asyncHandler(async (req, res) => {
     const {channelId} = req.params
+    if(!channelId){
+        throw new ApiError(400,"ChannelId is required")
+    }
+    if(!mongoose.Types.ObjectId.isValid(channelId)){
+        throw new ApiError(400,"Invalid channelId")
+    }
     const userId = req.user._id
     if(!userId.equals(channelId)){
-        throw new ApiError(401,"Unauthorized Access")
+        throw new ApiError(403,"Forbidden request")
     }
     const subscribers = await Subscription.find({
-        channel: new mongoose.Types.ObjectId(channelId)
+        channel: channelId,
     }).populate("subscriber","username avatar")
-    console.log(subscribers)
     res.status(200)
-    .json(new ApiResponse(200,subscribers[0],"Channel Subscribers Fetched Successfully"))
+    .json(new ApiResponse(200,subscribers,"Channel Subscribers Fetched Successfully"))
 
 })
 
@@ -51,10 +66,10 @@ const getUserChannelSubscribers = asyncHandler(async (req, res) => {
 const getSubscribedChannels = asyncHandler(async (req, res) => {
     const userId = req.user._id
     const subscribedTo = await Subscription.find({
-        subscriber: new mongoose.Types.ObjectId(userId)
+        subscriber: userId
     }).populate("channel","username avatar")
     res.status(200)
-    .json(new ApiResponse(200,subscribedTo[0],"Subscribed Channel Fetched Successfully"))
+    .json(new ApiResponse(200,subscribedTo,"Subscribed Channel Fetched Successfully"))
 })
 
 export {
