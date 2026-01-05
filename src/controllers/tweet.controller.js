@@ -12,43 +12,48 @@ const createTweet = asyncHandler(async (req, res) => {
     //create the tweet doc in the db 
     //hide creadentials 
     //send the doc back to client
-    const userId = req.user._id
     //TODO: create tweet
-    const mediaFile = req.file?.path
+    const userId = req.user._id
+    const mediaFile = req.file
     const {content} = req.body
-    if(content === undefined){
+    let trimmedContent;
+    if(content !== undefined && content !== null){
+        if(typeof content === "string"){
+            trimmedContent = content.trim()
+            if(!trimmedContent){
+                throw new ApiError(400,"Content cannot be empty")
+            }
+        }else{
+            throw new ApiError(400,"Tweet Content must be string")
+        }
+    }else{
         throw new ApiError(400,"Tweet content is required")
     }
-    if(typeof content !== "string"){
-        throw new ApiError(400,"Field must be a string")
-    }
-    const stringContent = content.trim()
-    if(!stringContent){
-        throw new ApiError(400,"Field cannot be empty")
-    }
-    if(stringContent.length > 500 ){
+    if(trimmedContent.length > 500 ){
         throw new ApiError(400,"Content length is too long")
     }
-
-    let mediaUrl;
+    let media;
     let mediaType;
-    let mediaPublicId;
-    if(mediaFile){
-        const media =  await uploadMedia(mediaFile)
-        if(!media){
-            throw new ApiError(500,"Media upload failed")
+    try {
+        if(mediaFile){
+            media =  await uploadMedia(mediaFile)
+            if(!media){
+                throw new ApiError(500,"Media upload failed")
+            }
+            mediaType = media.resource_type;
         }
-        mediaUrl = media.secure_url;
-        mediaType = media.resource_type;
-        mediaPublicId = media.public_id
+        const tweetdoc = await Tweet.create({owner: userId,content: trimmedContent,media: media?.secure_url,mediaType,mediaPublicId: media?.public_id})
+        const tweet = tweetdoc.toObject()
+        delete tweet.mediaType
+        delete tweet.mediaPublicId
+        res.status(201)
+        .json(new ApiResponse(201,tweet,"Tweet created successfully"))
+    } catch (error) {
+        if(media?.public_id && mediaType){
+            await deleteMedia(media.public_id,mediaType)
+        }
+        throw error
     }
-    const tweetdoc = await Tweet.create({owner: userId,content: stringContent,media: mediaUrl,mediaType,mediaPublicId})
-    console.log(tweetdoc)
-    const tweet = tweetdoc.toObject()
-    delete tweet.mediaType
-    delete tweet.mediaPublicId
-    res.status(201)
-    .json(new ApiResponse(201,tweet,"Tweet created successfully"))
 })
 
 const getUserTweets = asyncHandler(async (req, res) => {
@@ -177,7 +182,7 @@ const updateTweet = asyncHandler(async (req, res) => {
     //then update the tweet 
     //send back as response
     const {content} = req.body
-    if(content === undefined){
+    if(content === null || content === undefined){
         throw new ApiError(400,"Content is required")
     }
     if(typeof content !== "string"){
@@ -191,26 +196,27 @@ const updateTweet = asyncHandler(async (req, res) => {
         throw new ApiError(400,"Content too long")
     }
     const {tweetId} = req.params
-    console.log(tweetId)
+
     if(!mongoose.Types.ObjectId.isValid(tweetId)){
         throw new ApiError(400,"Invalid tweetId")
     }
-    const tweetDoc = await Tweet.findById(tweetId)
+    const tweetDoc = await Tweet.findOneAndUpdate(
+        {
+            _id: tweetId,
+            owner: req.user._id
+        },
+        {
+            content: newContent 
+        },
+        {
+            new: true,
+            runValidators: true
+        }
+    )
     if(!tweetDoc){
-        throw new ApiError(404,"Tweet not foudn")
-    }
-    const userId = req.user._id
-    if(!userId.equals(tweetDoc.owner)){
-        throw new ApiError(403,"Forbidden Access")
+        throw new ApiError(404,"Tweet not found")
     }
 
-    if(tweetDoc.content === newContent){
-        return res.status(200)
-        .json(new ApiResponse(200,null,"Nothing to change"))
-    }
-    tweetDoc.content = newContent
-
-    await tweetDoc.save({validateBeforeSave: false})
     const tweet = tweetDoc.toObject()
     delete tweet.mediaPublicId
     delete tweet.mediaType
@@ -223,20 +229,24 @@ const deleteTweet = asyncHandler(async (req, res) => {
     //TODO: delete tweet
     const userId = req.user._id
     const {tweetId} = req.params
+    if(!tweetId){
+        throw new ApiError(400,"TweetId is required")
+    }
     if(!mongoose.Types.ObjectId.isValid(tweetId)){
         throw new ApiError(400,"Invalid tweetId")
     }
-    const tweetDoc = await Tweet.findById(tweetId)
+    const tweetDoc = await Tweet.findOneAndDelete(
+        {
+            _id:tweetId,
+            owner: userId
+        }
+    )
     if(!tweetDoc){
         throw new ApiError(404,"Tweet not found")
     }
-    if(!userId.equals(tweetDoc.owner)){
-        throw new ApiError(401,"Unauthorized Access")
-    }
-    if(tweetDoc.mediaPublicId){
+    if(tweetDoc?.mediaPublicId && tweetDoc?.mediaType){
         await deleteMedia(tweetDoc.mediaPublicId,tweetDoc.mediaType)
     }
-    await tweetDoc.deleteOne()
     res.status(200)
     .json(new ApiResponse(200,null,"Tweet deleted successfully"))
 

@@ -49,6 +49,14 @@ const errorMiddleware = (err, req, res, next) => {
     })
   }
 
+  if (err.name === "ValidationError") {
+  return res.status(400).json({
+    success: false,
+    message: err.message
+  })
+}
+
+
   // 6️⃣ Fallback (all other unexpected errors)
   console.error(err)
   return res.status(500).json({
@@ -57,6 +65,7 @@ const errorMiddleware = (err, req, res, next) => {
     message: "Internal Server Error"
   })
 }
+
 
 
 
