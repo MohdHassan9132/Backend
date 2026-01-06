@@ -3,13 +3,14 @@ import { asyncHandler } from "../utils/async_handler.js"
 import {ApiError} from '../utils/api_error.js'
 import {ApiResponse} from '../utils/api_response.js'
 import { Playlist } from "../models/playlist.model.js"
+import {Video} from '../models/video.model.js'
 import {deleteMedia, uploadMedia} from '../utils/cloudinary.js'
 
 const createPlaylist = asyncHandler(async (req, res) => {
     //TODO: create playlist
     // await Playlist.collection.dropIndex("videos_1");
     const {name, description} = req.body
-    const playlistCoverPath = req?.file?.path
+    const playlistCover = req.file
     const userId = req.user._id
     let trimmedName,trimmedDescription;
     if(typeof name !== "string"){
@@ -28,23 +29,28 @@ const createPlaylist = asyncHandler(async (req, res) => {
             trimmedDescription = undefined
         }
     }
-    let playlistCoverImage,playlistCoverPublicId;
-    if(playlistCoverPath){
-        const playlistCover = await uploadMedia(playlistCoverPath)
-        playlistCoverPublicId = playlistCover.public_id
-        playlistCoverImage = playlistCover.secure_url
+    let playlistCoverImage
+    try {
+        if(playlistCover){
+            playlistCoverImage = await uploadMedia(playlistCover)
+        }else{
+            throw new ApiError(400,"PlaylistCoverImage is required")
+        }
+        const playlist = await Playlist.create({
+            name: trimmedName,
+            description: trimmedDescription,
+            playlistCoverPublicId: playlistCoverImage.public_id,
+            playlistCoverImage: playlistCoverImage.secure_url,
+            owner: userId,
+        })
+        
+        res.status(200)
+        .json(new ApiResponse(200,playlist,"Playlist created successfully"))
+    } catch (error) {
+        if(playlistCoverImage?.public_id){
+            await deleteMedia(playlistCoverImage.public_id,"image")
+        }
     }
-    const playlist = await Playlist.create({
-        name: trimmedName,
-        description: trimmedDescription,
-        playlistCoverPublicId,
-        playlistCoverImage,
-        owner: userId,
-    })
-    
-    res.status(200)
-    .json(new ApiResponse(200,playlist,"Playlist created successfully"))
- 
 })
 
 const getUserPlaylists = asyncHandler(async (req, res) => {
@@ -52,9 +58,6 @@ const getUserPlaylists = asyncHandler(async (req, res) => {
     const {userId} = req.params
     if(!mongoose.Types.ObjectId.isValid(userId)){
         throw new ApiError(400,"Invalid UserId")
-    }
-    if(!req.user._id.equals(userId)){
-        throw new ApiError(403,"Forbidden request")
     }
     const playlists = await Playlist.find({
         owner: userId
@@ -67,8 +70,72 @@ const getUserPlaylists = asyncHandler(async (req, res) => {
 })
 
 const getPlaylistById = asyncHandler(async (req, res) => {
-    const {playlistId} = req.params
     //TODO: get playlist by id
+    const {playlistId} = req.params
+    if(!mongoose.Types.ObjectId.isValid(playlistId)){
+        throw new ApiError(400,"Invalid PlaylistId")
+    }
+    const playlist = await Playlist.aggregate([
+        {
+            $match: {_id: new mongoose.Types.ObjectId(playlistId)}
+        },
+        {
+            $lookup:{
+                from: "videos",
+                localField: "videos",
+                foreignField: "_id",
+                as: "playlistVideos",
+                pipeline:[
+                    {
+                        $match: {isPublished: true}
+                    },
+                    {
+                        $lookup:{
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                            pipeline:[
+                                {
+                                    $project:{
+                                        avatar: 1,
+                                        username: 1
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        $unwind: "$owner"
+                    },
+                    {
+                        $project:{
+                            videoFile: 1,
+                            thumbnail: 1,
+                            title: 1,
+                            description: 1,
+                            duration: 1,
+                            views: 1,
+                            owner: 1
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $match: {
+                playlistVideos:{$ne: []} 
+            }
+        },
+        {
+            $project:{
+                playlistVideos: 1
+            }
+        }
+
+    ])
+    res.status(200)
+    .json(new ApiResponse(200,playlist,"Playlist Fetched successfully"))
 })
 
 const addVideoToPlaylist = asyncHandler(async (req, res) => {
@@ -81,7 +148,10 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(videoId)) {
         throw new ApiError(400, "Invalid VideoId")
     }
-
+    const isExist = await Video.exists(videoId)
+    if(!isExist){
+        throw new ApiError(404,"Video not found")
+    }
     const playlist = await Playlist.findOneAndUpdate(
         {
             _id: playlistId,
@@ -97,7 +167,7 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
     ).select("-createdAt -updatedAt")
 
     if (!playlist) {
-        throw new ApiError(404, "Playlist not found or forbidden")
+        throw new ApiError(404, "Playlist not found")
     }
 
     res.status(200).json(
@@ -132,7 +202,7 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
         throw new ApiError(404,"Playlist not found")
     }
     res.status(200)
-    .json(new ApiResponse(200,playlist,"Video re"))
+    .json(new ApiResponse(200,playlist,"Video removed successfully"))
 
 })
 
@@ -143,14 +213,15 @@ const deletePlaylist = asyncHandler(async (req, res) => {
     if(!mongoose.Types.ObjectId.isValid(playlistId)){
         throw new ApiError(400,"Invalid PlaylistId")
     }
-    const playlist = await Playlist.findById(playlistId)
+    const playlist = await Playlist.findOneAndDelete(
+        {
+            _id: playlistId,
+            owner: userId
+        }
+    )
     if(!playlist){
         throw new ApiError(404,"Playlist not found")
     }
-    if(!userId.equals(playlist.owner)){
-        throw new ApiError(403,"Forbidden request")
-    }
-    await playlist.deleteOne()
     res.status(200)
     .json(new ApiResponse(200,null,"Playlist deleted successfully"))
 
@@ -159,8 +230,8 @@ const deletePlaylist = asyncHandler(async (req, res) => {
 const updatePlaylist = asyncHandler(async (req, res) => {
     //TODO: update playlist
     const {playlistId} = req.params
-    const {name, description} = req.body || {}
-    const playlistCoverImagePath = req?.file?.path
+    const {name, description} = req.body
+    const playlistCover = req?.file
     const userId = req.user._id
     if(!mongoose.Types.ObjectId.isValid(playlistId)){
         throw new ApiError(400,"Invalid PlaylistId")
@@ -187,27 +258,32 @@ const updatePlaylist = asyncHandler(async (req, res) => {
     if(!userId.equals(playlistData.owner)){
         throw new ApiError(403,"Forbidden request")
     }
-    let playlistCoverImage,playlistCoverPublicId;
-    if(playlistCoverImagePath){
-        const playlistCover = await uploadMedia(playlistCoverImagePath)
-        playlistCoverImage = playlistCover.secure_url
-        playlistCoverPublicId = playlistCover.public_id
-        const oldPlaylistCoverPublicId = playlistData.playlistCoverPublicId
-        playlistData.playlistCoverImage = playlistCoverImage
-        playlistData.playlistCoverPublicId = playlistCoverPublicId
-        await deleteMedia(oldPlaylistCoverPublicId,"image")
+    let playlistCoverImage;
+    try {
+        if(playlistCover){
+            playlistCoverImage = await uploadMedia(playlistCover)
+            const oldPlaylistCoverPublicId = playlistData?.playlistCoverPublicId
+            playlistData.playlistCoverImage = playlistCoverImage.secure_url
+            playlistData.playlistCoverPublicId = playlistCoverImage.public_id
+            await deleteMedia(oldPlaylistCoverPublicId,"image")
+        }
+        if(validName){
+            playlistData.name = validName
+        }
+        if(validDescription){
+            playlistData.description = validDescription
+        }
+        await playlistData.save()
+        const playlist = playlistData.toObject()
+        delete playlist.playlistCoverPublicId
+        res.status(200)
+        .json(new ApiResponse(200,playlist,"Playlist updated successfully"))
+    } catch (error) {
+        if(playlistCoverImage?.public_id){
+            await deleteMedia(playlistCoverImage.public_id,"image")
+        }
+        throw error
     }
-    if(validName){
-        playlistData.name = validName
-    }
-    if(validDescription){
-        playlistData.description = validDescription
-    }
-    await playlistData.save({validateBeforeSave: false})
-    const playlist = playlistData.toObject()
-    delete playlist.playlistCoverPublicId
-    res.status(200)
-    .json(new ApiResponse(200,playlist,"Playlist updated successfully"))
     
 })
 

@@ -3,6 +3,7 @@ import {ApiError} from '../utils/api_error.js'
 import {ApiResponse} from '../utils/api_response.js'
 import {uploadMedia,deleteMedia} from '../utils/cloudinary.js'
 import {Tweet} from '../models/tweet.model.js'
+import {Like} from '../models/likes.model.js'
 import mongoose from 'mongoose'
 
 const createTweet = asyncHandler(async (req, res) => {
@@ -235,20 +236,33 @@ const deleteTweet = asyncHandler(async (req, res) => {
     if(!mongoose.Types.ObjectId.isValid(tweetId)){
         throw new ApiError(400,"Invalid tweetId")
     }
-    const tweetDoc = await Tweet.findOneAndDelete(
-        {
-            _id:tweetId,
-            owner: userId
+    let tweetDoc
+    try {
+        tweetDoc = await Tweet.findOneAndDelete(
+            {
+                _id:tweetId,
+                owner: userId
+            }
+        )
+        if(!tweetDoc){
+            throw new ApiError(404,"Tweet not found")
         }
-    )
-    if(!tweetDoc){
-        throw new ApiError(404,"Tweet not found")
+        if(tweetDoc){
+            Like.deleteMany(
+                {tweet: tweetDoc._id}
+            )
+        }
+        if(tweetDoc?.mediaPublicId && tweetDoc?.mediaType){
+            await deleteMedia(tweetDoc.mediaPublicId,tweetDoc.mediaType)
+        }
+        res.status(200)
+        .json(new ApiResponse(200,null,"Tweet deleted successfully"))
+    } catch (error) {
+        if(tweetDoc?.mediaPublicId && tweetDoc?.mediaType){
+            await deleteMedia(tweetDoc.mediaPublicId,tweetDoc.mediaType)
+        }
+        throw error
     }
-    if(tweetDoc?.mediaPublicId && tweetDoc?.mediaType){
-        await deleteMedia(tweetDoc.mediaPublicId,tweetDoc.mediaType)
-    }
-    res.status(200)
-    .json(new ApiResponse(200,null,"Tweet deleted successfully"))
 
 })
 

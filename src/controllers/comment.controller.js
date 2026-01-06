@@ -264,9 +264,4 @@ const deleteComment = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200,null,"Comment deleted successfully"))
 })
 
-export {
-        getVideoComments, 
-        addComment, 
-        updateComment,
-        deleteComment
-    }
+export {getVideoComments, addComment, updateComment,deleteComment}

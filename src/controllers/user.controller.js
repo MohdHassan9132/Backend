@@ -5,7 +5,6 @@ import { uploadMedia,deleteMedia } from '../utils/cloudinary.js'
 import {User} from '../models/user.model.js'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
-import fs from 'fs'
  
 
 const cookieOptions = {

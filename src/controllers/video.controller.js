@@ -4,9 +4,10 @@ import { Video } from "../models/video.model.js"
 import { asyncHandler } from "../utils/async_handler.js"
 import { uploadMedia,deleteMedia } from "../utils/cloudinary.js"
 import { User } from "../models/user.model.js"
+import {Comment} from '../models/comment.model.js'
+import {Like} from '../models/likes.model.js'
+import { Playlist } from "../models/playlist.model.js"
 import mongoose from "mongoose"
-
-
 
 const getAllVideos = asyncHandler(async (req, res) => {
     const { page, limit, query, sort, userId } = req.query
@@ -133,8 +134,6 @@ const getAllVideos = asyncHandler(async (req, res) => {
     )
 })
 
-
-
 const publishAVideo = asyncHandler(async (req, res) => {
     const { title, description} = req.body
     let trimmedTitle;
@@ -209,7 +208,19 @@ const getVideoById = asyncHandler(async (req, res) => {
     const userId = req.user._id
     const video = await Video.aggregate([
         {
-            $match: {_id: new mongoose.Types.ObjectId(videoId)}
+            $match: {
+                $expr: {
+                    $and: [
+                        { $eq: ["$_id", new mongoose.Types.ObjectId(videoId)] },
+                        {
+                            $or: [
+                                { $eq: ["$isPublished", true] },
+                                { $eq: ["$owner", userId] }
+                            ]
+                        }
+                    ]
+                }
+            }
         },
         {
             $lookup:{
@@ -254,6 +265,26 @@ const getVideoById = asyncHandler(async (req, res) => {
             $unwind: "$owner"
         },
         {
+            $lookup:{
+                from:"likes",
+                localField: "_id",
+                foreignField: "video",
+                as: "videoLikes",
+            }
+        },
+        {
+             $addFields:{
+                likes:{$size: "$videoLikes"},
+                isLiked: {
+                    $cond:{
+                        if:{$in:[userId,"$videoLikes.likedBy"]},
+                        then: 1,
+                        else: 0
+                    }
+                }
+            }
+        },
+        {
             $project:{
                 owner: 1,
                 videoFile: 1,
@@ -262,6 +293,8 @@ const getVideoById = asyncHandler(async (req, res) => {
                 title: 1,
                 description: 1,
                 views: 1,
+                likes: 1,
+                isLiked: 1,
             }
         }
     ])
@@ -376,6 +409,12 @@ const deleteVideoById = asyncHandler(async (req, res) => {
             {watchHistory: videoDoc._id},
             {$pull: {watchHistory: videoDoc._id}}
         )
+        await Playlist.updateMany(
+            {videos: videoDoc._id},
+            {$pull: {videos: videoDoc._id}}
+        )
+        await Comment.deleteMany({video: videoDoc._id})
+        await Like.deleteMany({video: videoDoc._id})
         res.status(200)
         .json(new ApiResponse(200,null,"Video deleted successfully"))
     } catch (error) {
