@@ -358,11 +358,23 @@ const updatUserCoverImage = asyncHandler(async(req,res)=>{
 })
 
 const getUserChannelProfile = asyncHandler(async(req,res)=>{
-    const userId = new mongoose.Types.ObjectId(req.user._id)
+    const userId = req.user._id
+    if(!req.params.username){
+        throw new ApiError(400,"username is required")
+    }
     const {username}  = req.params
+    let trimmedUsername;
+    if(typeof username === "string"){
+        trimmedUsername = username.trim().toLowerCase()
+        if(!trimmedUsername){
+            throw new ApiError(400,"username cannot be empty")
+        }
+    }else{
+        throw new ApiError(400,"username must be string")
+    }
     const channel = await User.aggregate([
         {
-            $match: {username}
+            $match: {username: trimmedUsername}
         },
         {
             $lookup:{

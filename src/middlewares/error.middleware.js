@@ -29,17 +29,21 @@ const errorMiddleware = (err, req, res, next) => {
   }
 
   // 4️⃣ JWT errors
-  if (
-    err instanceof jwt.JsonWebTokenError ||
-    err instanceof jwt.TokenExpiredError
-  ) {
+ if (err instanceof jwt.TokenExpiredError) {
     return res.status(401).json({
       success: false,
-      statusCode: 401,
+      statusCode: 498,
       message: "Authentication required"
     })
   }
 
+  if (err instanceof jwt.JsonWebTokenError) {
+  return res.status(401).json({
+    success: false,
+    statusCode: 401,
+    message: "Invalid or missing token"
+  })
+}
   // 5️⃣ Mongo duplicate key
   if (err.code === 11000) {
     return res.status(409).json({

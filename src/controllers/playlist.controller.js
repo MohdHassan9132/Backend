@@ -148,13 +148,13 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(videoId)) {
         throw new ApiError(400, "Invalid VideoId")
     }
-    const isExist = await Video.exists(videoId)
+    const isExist = await Video.exists(new mongoose.Types.ObjectId(videoId))
     if(!isExist){
         throw new ApiError(404,"Video not found")
     }
     const playlist = await Playlist.findOneAndUpdate(
         {
-            _id: playlistId,
+            _id: new mongoose.Types.ObjectId(playlistId),
             owner: userId, 
         },
         {

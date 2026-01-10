@@ -301,6 +301,14 @@ const getVideoById = asyncHandler(async (req, res) => {
     if(video.length !== 1){
         throw new ApiError(404,"No video found")
     }
+    await User.updateOne(
+        {
+            _id: userId,
+        },
+        {
+            $addToSet:{watchHistory: videoId}
+        }
+    )
     res.status(200)
     .json(new ApiResponse(200,video[0],"Video fetched successfully"))
 })

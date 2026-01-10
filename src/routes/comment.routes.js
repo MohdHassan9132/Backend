@@ -3,7 +3,7 @@ import { addComment, deleteComment, getVideoComments, updateComment } from '../c
 import {verifyJWT} from '../middlewares/auth.middleware.js'
 
 const commentRouter = Router()
-commentRouter.route("/getVideoComments").get(verifyJWT,getVideoComments)
+commentRouter.route("/getVideoComments/:videoId").get(verifyJWT,getVideoComments)
 commentRouter.route("/addcomment/:videoId").post(verifyJWT,addComment)
 commentRouter.route("/updateComment/:videoId/:commentId").patch(verifyJWT,updateComment)
 commentRouter.route("/deleteComment/:videoId/:commentId").delete(verifyJWT,deleteComment)
