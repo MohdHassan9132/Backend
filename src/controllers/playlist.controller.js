@@ -32,7 +32,7 @@ const createPlaylist = asyncHandler(async (req, res) => {
     let playlistCoverImage
     try {
         if(playlistCover){
-            playlistCoverImage = await uploadMedia(playlistCover)
+            playlistCoverImage = await uploadMedia(playlistCover,"image")
         }else{
             throw new ApiError(400,"PlaylistCoverImage is required")
         }
@@ -261,7 +261,7 @@ const updatePlaylist = asyncHandler(async (req, res) => {
     let playlistCoverImage;
     try {
         if(playlistCover){
-            playlistCoverImage = await uploadMedia(playlistCover)
+            playlistCoverImage = await uploadMedia(playlistCover,"image")
             const oldPlaylistCoverPublicId = playlistData?.playlistCoverPublicId
             playlistData.playlistCoverImage = playlistCoverImage.secure_url
             playlistData.playlistCoverPublicId = playlistCoverImage.public_id

@@ -37,7 +37,8 @@ const createTweet = asyncHandler(async (req, res) => {
     let mediaType;
     try {
         if(mediaFile){
-            media =  await uploadMedia(mediaFile)
+            mediaType = mediaFile.mimetype.startsWith("video") ? "video" : "image";
+            media =  await uploadMedia(mediaFile,mediaType)
             if(!media){
                 throw new ApiError(500,"Media upload failed")
             }

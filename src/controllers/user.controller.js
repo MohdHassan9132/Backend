@@ -9,7 +9,8 @@ import mongoose from 'mongoose'
 
 const cookieOptions = {
     httpOnly: true,
-    secure: true
+    secure: false,
+    sameSite: "lax"
 }
 
 const refreshAccessAndRefreshToken = async(userId)=>{
@@ -55,10 +56,10 @@ const registerUser = asyncHandler(async(req,res)=>{
     }
     let avatarImage,uploadedCoverImage;
  try {
-        avatarImage = await uploadMedia(avatar[0])
+        avatarImage = await uploadMedia(avatar[0],"image")
         const coverImage = req?.files?.coverImage
         if(coverImage && coverImage.length >=  1){
-            uploadedCoverImage = await uploadMedia(coverImage[0])
+            uploadedCoverImage = await uploadMedia(coverImage[0],"image")
         }
    
         const user = await User.create({
@@ -311,7 +312,7 @@ const UpdateUserAvatar = asyncHandler(async(req,res)=>{
     }
     let newAvatar;
     try {
-        newAvatar = await uploadMedia(avatar)
+        newAvatar = await uploadMedia(avatar,"image")
         const oldAvatar = userData.avatarPublicId
         userData.avatarPublicId = newAvatar.public_id
         userData.avatar = newAvatar.secure_url
@@ -337,7 +338,7 @@ const updatUserCoverImage = asyncHandler(async(req,res)=>{
     }
     let newCoverImage
     try {
-        newCoverImage = await uploadMedia(coverImage)
+        newCoverImage = await uploadMedia(coverImage,"image")
         const oldCoverImage = userData.coverImagePublicId
         userData.coverImagePublicId = newCoverImage.public_id
         userData.coverImage = newCoverImage.secure_url
@@ -462,6 +463,7 @@ const getUserWatchHistory = asyncHandler(async(req,res)=>{
                         $project:{
                             videoFile: 1,
                             thumbnail: 1,
+                            createdAt: 1,
                             description: 1,
                             title: 1,
                             duration: 1,

@@ -100,6 +100,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
                         duration: 1,
                         views: 1,
                         isPublished: 1,
+                        createdAt: 1,
                         owner: {
                             _id: "$owner._id",
                             username: "$owner.username",
@@ -171,8 +172,8 @@ const publishAVideo = asyncHandler(async (req, res) => {
     }
     let videoFile,thumbnailFile;
     try {
-        videoFile = await uploadMedia(video[0])
-        thumbnailFile = await uploadMedia(thumbnail[0])
+        videoFile = await uploadMedia(video[0],"video")
+        thumbnailFile = await uploadMedia(thumbnail[0],"image")
 
         const videoDoc = await Video.create({videoFile: videoFile.secure_url,videoPublicId: videoFile.public_id,thumbnail: thumbnailFile.secure_url, thumbnailPublicId: thumbnailFile.public_id,title: trimmedTitle,description: trimmedDescription,owner: req.user._id,duration: videoFile.duration
         })
@@ -288,6 +289,7 @@ const getVideoById = asyncHandler(async (req, res) => {
             $project:{
                 owner: 1,
                 videoFile: 1,
+                createdAt: 1,
                 thumbnail: 1,
                 duration: 1,
                 title: 1,
@@ -363,7 +365,7 @@ const updateVideo = asyncHandler(async (req, res) => {
         }
 
         if(thumbnail){
-            newThumbnail = await uploadMedia(thumbnail)
+            newThumbnail = await uploadMedia(thumbnail,"image")
         }
         if(trimmedDescription){
             videoDoc.description = trimmedDescription

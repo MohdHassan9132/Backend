@@ -18,7 +18,6 @@ const toggleSubscription = asyncHandler(async (req, res) => {
     const isExist = await User.exists({
         _id: channelId
     })
-    console.log(isExist)
     if(!isExist){
         throw new ApiError(404,"Channel Not found")
     }
@@ -28,7 +27,6 @@ const toggleSubscription = asyncHandler(async (req, res) => {
     })
     if(!subscriber){
         const newSubscriber = await Subscription.create({channel: channelId,subscriber: userId})
-        console.log(newSubscriber)
         return res.status(200)
         .json(new ApiResponse(200,newSubscriber,"Subscribed Successfully"))
     }

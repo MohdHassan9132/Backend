@@ -115,7 +115,7 @@ const getLikedVideos = asyncHandler(async (req, res) => {
                 from: "videos",
                 localField: "video",
                 foreignField: "_id",
-                as: "likedVideos",
+                as: "likedVideo",
                 pipeline:[
                     {
                         $match: {isPublished: true}
@@ -125,7 +125,15 @@ const getLikedVideos = asyncHandler(async (req, res) => {
                             from: "users",
                             localField: "owner",
                             foreignField: "_id",
-                            as: "owner"
+                            as: "owner",
+                            pipeline:[
+                                {
+                                    $project:{
+                                        username: 1,
+                                        avatar: 1
+                                    }
+                                }
+                            ]
                         }
                     },
                     {
@@ -134,12 +142,9 @@ const getLikedVideos = asyncHandler(async (req, res) => {
                     },
                     {
                         $project: {
-                            owner:{
-                                username: "$owner.username",
-                                avatar: "$owner.avatar",
-                                //here will be of the owner
-                            },
+                            owner: 1,
                             videoFile: 1,
+                            createdAt: 1,
                             thumbnail: 1,
                             title: 1,
                             description: 1,
@@ -153,14 +158,18 @@ const getLikedVideos = asyncHandler(async (req, res) => {
             }
         },
         {
-            $unwind: "$likedVideos"
+            $unwind: "$likedVideo"
         },
         {
             $project:{
-                likedVideos: 1,
+                likedVideo: 1,
                 _id: 0
             }
+        },
+        {
+            $replaceRoot: { newRoot: "$likedVideo" }//make the given doc the root object
         }
+
     ])
     if(!likedVideos.length){
         return res.status(200)
