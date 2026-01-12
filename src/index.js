@@ -1,13 +1,21 @@
-import { dbConnection } from "./db/index.js";
+import "dotenv/config";
 import { app } from "./app.js";
-dbConnection().then(()=>{
-    app.on("error",()=>{
-        console.log("Error from app")
-    })
-    app.listen(process.env.PORT||3000,()=>{
-        console.log(`app is listening on port ${process.env.PORT}`)
-    })
-})
-.catch((error)=>{
-    console.log(error.message)
-})
+import { ENV } from "./config/env.js";
+import { dbConnection } from "./db/index.js";
+
+(async () => {
+  try {
+    await dbConnection(ENV.DB.URL, ENV.DB.NAME);
+
+    app.listen(ENV.PORT, () => {
+      console.log(
+        ENV.IS_PROD
+          ? "🚀 Server running in PRODUCTION"
+          : "🧪 Server running in DEVELOPMENT"
+      );
+    });
+  } catch (error) {
+    console.error("❌ Server startup failed:", error.message);
+    process.exit(1);
+  }
+})();

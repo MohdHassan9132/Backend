@@ -5,13 +5,9 @@ import { uploadMedia,deleteMedia } from '../utils/cloudinary.js'
 import {User} from '../models/user.model.js'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
- 
+import { cookieOptions } from "../config/cookie.js";
+import { ENV } from "../config/env.js";
 
-const cookieOptions = {
-    httpOnly: true,
-    secure: false,
-    sameSite: "lax"
-}
 
 const refreshAccessAndRefreshToken = async(userId)=>{
     try {
@@ -201,7 +197,7 @@ const refreshAccessToken = asyncHandler(async(req,res)=>{
     if(!token){
         throw new ApiError(401,"Unauthorized Access")
     }
-    const tokenData = jwt.verify(token,process.env.REFRESH_TOKEN_SECRET)
+    const tokenData = jwt.verify(token, ENV.TOKENS.REFRESH_SECRET);
     const user = await User.findById(tokenData._id)
     if(!user){
         throw new ApiError(404,"User not found")
