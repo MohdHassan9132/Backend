@@ -17,8 +17,7 @@ const tweetSchema = new Schema({
         type: String
     },
     mediaPublicId:{
-        type: String,
-        required: true
+        type: String
     }
 },{timestamps: true})
 
