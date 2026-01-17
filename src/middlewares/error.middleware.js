@@ -30,7 +30,7 @@ const errorMiddleware = (err, req, res, next) => {
 
   // 4️⃣ JWT errors
  if (err instanceof jwt.TokenExpiredError) {
-    return res.status(401).json({
+    return res.status(498).json({
       success: false,
       statusCode: 498,
       message: "Authentication required"
