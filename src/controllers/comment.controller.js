@@ -71,10 +71,26 @@ const getVideoComments = asyncHandler(async (req, res) => {
           },
           { $unwind: "$commentBy" },
           {
+            $lookup:{
+              from: "likes",
+              localField: "_id",
+              foreignField: "comment",
+              as: "likedComments"
+            }
+          },
+          {
+            $addFields:{
+              likes:{$size: "$likedComments"},
+              isLiked:{$in:[req.user._id,"$likedComments.likedBy"]}
+            }
+          },
+          {
             $project: {
               _id: 1,
               content: 1,
-              commentBy: 1
+              commentBy: 1,
+              isLiked: 1,
+              likes: 1
             }
           }
         ]
@@ -263,5 +279,8 @@ const deleteComment = asyncHandler(async (req, res) => {
     res.status(200)
     .json(new ApiResponse(200,null,"Comment deleted successfully"))
 })
+
+
+
 
 export {getVideoComments, addComment, updateComment,deleteComment}

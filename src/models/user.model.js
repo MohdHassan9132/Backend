@@ -16,16 +16,13 @@ const userSchema = new Schema({
         lowercase: true
     },
     fullName:{
-        type: String,
-        required: true
+        type: String
     },
     avatar:{
-        type: String,
-        required: true
+        type: String
     },
     avatarPublicId:{
-        type: String,
-        required: true
+        type: String
     },
     coverImage:{
         type: String

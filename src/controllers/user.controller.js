@@ -33,7 +33,7 @@ const registerUser = asyncHandler(async(req,res)=>{
     //create the user in the db
     //return the response without sensitive fields
     const {username,email,fullName,password} = req.body
-    if([username,email,fullName,password].some(fields => !fields || !fields.trim())){
+    if([username,email,password].some(fields => !fields || !fields.trim())){
         throw new ApiError(400,"All fields are required")
     }
 
@@ -47,19 +47,18 @@ const registerUser = asyncHandler(async(req,res)=>{
     
     const avatar = req?.files?.avatar
 
-    if(!avatar || avatar.length === 0){
-        throw new ApiError(400,"Avatar is required")
-    }
     let avatarImage,uploadedCoverImage;
  try {
-        avatarImage = await uploadMedia(avatar[0],"image")
+        if(avatar && avatar.length >= 1){
+            avatarImage = await uploadMedia(avatar[0],"image")
+        }
         const coverImage = req?.files?.coverImage
         if(coverImage && coverImage.length >=  1){
             uploadedCoverImage = await uploadMedia(coverImage[0],"image")
         }
    
         const user = await User.create({
-            username,email,fullName,password,coverImage: uploadedCoverImage?.secure_url,coverImagePublicId: uploadedCoverImage?.public_id,avatar: avatarImage.secure_url,avatarPublicId: avatarImage.public_id
+            username,email,fullName,password,coverImage: uploadedCoverImage?.secure_url,coverImagePublicId: uploadedCoverImage?.public_id,avatar: avatarImage?.secure_url,avatarPublicId: avatarImage?.public_id
         })
         
         const userData = user.toObject()
@@ -97,7 +96,7 @@ const loginUser = asyncHandler(async(req,res)=>{
     if(!username && !email){
         throw new ApiError(400,"Email or username is required")
     }
-    let trimmedUsername,trimmedEmail;
+    let trimmedUsername;
    if(username!==undefined && username!== null){
         if(typeof username === "string"){
             trimmedUsername = username.trim().toLowerCase()
@@ -108,16 +107,7 @@ const loginUser = asyncHandler(async(req,res)=>{
             throw new ApiError(400,"Username cannot be empty")
         }
    }
-   if(email !== undefined && email !== null){
-        if(typeof email === "string"){
-            trimmedEmail = email.trim().toLowerCase()
-        }else{
-            throw new ApiError(400,"email must be string")
-        }
-        if(!trimmedEmail){
-            throw new ApiError(400,"Email cannot be empty")
-        }
-   }
+
     let trimmedPassword;
     if(!password){
         throw new ApiError(400,"password is required")
@@ -131,12 +121,7 @@ const loginUser = asyncHandler(async(req,res)=>{
         throw new ApiError(400,"Password must be string")
     }
 
-    const userData = await User.findOne({
-        $or: [
-            {username: trimmedUsername},
-            {email: trimmedEmail}
-        ]
-    })
+    const userData = await User.findOne({username: trimmedUsername})
 
     if(!userData){
         throw new ApiError(404,"No User found")
@@ -220,12 +205,12 @@ const updateUserDetails = asyncHandler(async(req,res)=>{
     //update the user fields
     //return the response
     const userData = req.user
-    const {username,email}  = req.body
-    if(!username && !email){
+    const {username,fullName}  = req.body
+    if(!username && !fullName){
         throw new ApiError(400,"At least one field is required")
     }
     const updateDetails = {}
-    let trimmedEmail,trimmedUsername
+    let trimmedfullName,trimmedUsername
     if(username !== undefined && username!= null){
         if(typeof username === "string"){
             trimmedUsername = username.trim().toLowerCase()
@@ -238,16 +223,16 @@ const updateUserDetails = asyncHandler(async(req,res)=>{
             updateDetails.username = trimmedUsername
         }
     }
-    if(email !== undefined && email!== null){
-        if(typeof email === "string"){
-            trimmedEmail = email.trim().toLowerCase()
+    if(fullName !== undefined && fullName!== null){
+        if(typeof fullName === "string"){
+            trimmedfullName = fullName.trim().toLowerCase()
         }else{
-            throw new ApiError(400,"email must be string")
+            throw new ApiError(400,"fullName must be string")
         }
-        if(!trimmedEmail){
-            throw new ApiError(400,"Email cannot be empty")
+        if(!trimmedfullName){
+            throw new ApiError(400,"fullName cannot be empty")
         }else{
-            updateDetails.email = trimmedEmail
+            updateDetails.fullName = fullName
         }
     }
     if(Object.keys(updateDetails).length === 0){
@@ -390,7 +375,16 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
             }
         },
         {
+            $lookup:{
+                from: "videos",
+                localField: "_id",
+                foreignField: "owner",
+                as: "userVideos"
+            }
+        },
+        {
             $addFields:{
+                Videos: {$size: "$userVideos"},
                 subscribers: {$size: "$subscribersCount"},
                 subscribedTo: {$size: "$subscribedToCount"},
                 isSubscribed: {
@@ -410,6 +404,7 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
                 subscribers: 1,
                 subscribedTo: 1,
                 isSubscribed: 1,
+                Videos: 1
 
             }
         }

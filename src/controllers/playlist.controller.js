@@ -59,9 +59,52 @@ const getUserPlaylists = asyncHandler(async (req, res) => {
     if(!mongoose.Types.ObjectId.isValid(userId)){
         throw new ApiError(400,"Invalid UserId")
     }
-    const playlists = await Playlist.find({
-        owner: userId
-    }).select("-playlistCoverPublicId").populate("owner","avatarUrl username")
+    // const playlists = await Playlist.find({
+    //     owner: userId
+    // }).select("-playlistCoverPublicId").populate("owner","avatarUrl username")
+    const playlists = await Playlist.aggregate([
+        {
+            $match:{owner: new mongoose.Types.ObjectId(userId)}
+        },
+        {
+            $lookup:{
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        {
+            $lookup:{
+                from: "videos",
+                localField: "videos",
+                foreignField: "_id",
+                as: "playlistVideos"
+            }
+        },
+        {
+            $addFields:{
+                videos:{$size: "$playlistVideos"}
+            }
+        },
+        {
+            $unwind: "$owner"
+        },
+        {
+            $project:{
+                owner:{
+                    avatar: "$owner.avatar",
+                    username: "$owner.username"
+                },
+                videos: 1,
+                name: 1,
+                description: 1,
+                playlistCoverImage: 1
+            }
+        }
+    ]
+        
+    )
     if(!playlists){
         throw new ApiError(404,"Playlists not found")
     }
@@ -129,7 +172,10 @@ const getPlaylistById = asyncHandler(async (req, res) => {
         },
         {
             $project:{
-                playlistVideos: 1
+                playlistVideos: 1,
+                name: 1,
+                description: 1,
+                playlistCoverImage: 1
             }
         }
 
