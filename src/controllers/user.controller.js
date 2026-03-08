@@ -295,6 +295,7 @@ const googleAuth = asyncHandler(async(req,res)=>{
         redirectUri: ENV.GOOGLE.REDIRECT_URL
     })
     if(!req.query?.error && !req.query?.code){
+      console.log("generating redirect url")
         const redirectUrl = googleClient.generateAuthUrl({
             scope:[
                 "https://www.googleapis.com/auth/userinfo.profile",
@@ -306,24 +307,31 @@ const googleAuth = asyncHandler(async(req,res)=>{
         res.redirect(redirectUrl)
     }else{
         // console.log(req.query)
+        console.log("got the code from google",req.query?.code)
         const {tokens} = await googleClient.getToken(req.query?.code)
         // console.log(tokens)
+        console.log("got the tokens from google",tokens.scope)
         googleClient.setCredentials(tokens)
         const tokenData = await googleClient.verifyIdToken({
             idToken: tokens.id_token,
             audience: googleClient._clientId,
         })
         const userData = tokenData.payload
+        console.log("got user details from id_token",userData)
         // console.log(userData)
         //instead of findOne can also use exist and take the whole user doc from refreshAccessAndRefreshToken
+        console.log("checking does the user exists")
         const isUser = await User.findOne({googleId: userData.sub})
         if(isUser){
+          console.log("user exists generating tokens")
             const {refreshToken,accessToken} = await refreshAccessAndRefreshToken(isUser._id)
             res.status(200)
-            .cookie("refreshToken",refreshToken)
-            .cookie("accessToken",accessToken)
+            console.log("tokens generated redirecting to frontend")
+            .cookie("refreshToken",refreshToken,cookieOptions)
+            .cookie("accessToken",accessToken,cookieOptions)
             res.redirect(`${ENV.FRONTEND_URL}`)
         }else{
+          console.log("creating the user")
             const user = await User.create({
                 username: userData.name,
                 avatar: userData.picture,
@@ -331,11 +339,14 @@ const googleAuth = asyncHandler(async(req,res)=>{
                 email: userData.email,
                 googleRefreshToken: tokens.refresh_token
             })
+            console.log("user created")
             if(!user){
                 console.error("Error while creating user in the db")
                 throw new ApiError(500,"Something went wrong")
             }
+            console.log("generating tokens")
             const {refreshToken,accessToken} = await refreshAccessAndRefreshToken(user._id)
+            console.log("tokens generated redirecting to frontend")
             res.status(201)
             .cookie("refreshToken",refreshToken)
             .cookie("accessToken",accessToken)
