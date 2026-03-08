@@ -2,6 +2,7 @@ import mongoose,{Schema} from "mongoose";
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 
+
 const userSchema = new Schema({
     username:{
         type: String,
@@ -22,28 +23,35 @@ const userSchema = new Schema({
         type: String
     },
     avatarPublicId:{
-        type: String
+        type: String,
     },
     coverImage:{
         type: String
     },
     coverImagePublicId:{
-        type: String
+        type: String,
     },
     password:{
         type: String,
-        required: true,
+
     },
     refreshToken:{
         type: String,
-        default: ""
+
+    },
+    googleId:{
+        type: String,
+
+    },
+    googleRefreshToken:{
+        type: String,
+
     },
     watchHistory:[
         {
             type: Schema.Types.ObjectId,
-            ref: "Video"
+            ref: "Video",
         }
-        
     ]
 
 },{timestamps: true})

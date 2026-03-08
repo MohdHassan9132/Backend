@@ -2,6 +2,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import session from "express-session";
 
 import { corsOptions } from "./config/cors.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
@@ -13,6 +14,13 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(express.static("public/temp"));
 
 app.use(cors(corsOptions));
+
+app.use(session({
+  secret: ENV.SESSION, // Replace with a real secret string
+  resave: false,                           // Recommended: prevents unnecessary session saves
+  saveUninitialized: true,                 // Required to store the 'state' before login
+}));
+
 app.use(cookieParser());
 
 // routes
@@ -23,6 +31,7 @@ import { tweetRouter } from "./routes/tweet.routes.js";
 import { commentRouter } from "./routes/comment.routes.js";
 import { likeRouter } from "./routes/like.routes.js";
 import { playlistRouter } from "./routes/playlist.routes.js";
+import { ENV } from "./config/env.js";
 
 app.use("/api/v1/user", userRouter);
 app.use("/api/v1/video", videoRouter);

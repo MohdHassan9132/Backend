@@ -121,4 +121,6 @@ dist
 .yarn/install-state.gz
 .pnp.*
 learning.txt
+
+googleAuthCredentials.json
 tree.txt
