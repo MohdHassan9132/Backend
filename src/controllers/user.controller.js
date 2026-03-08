@@ -325,8 +325,8 @@ const googleAuth = asyncHandler(async(req,res)=>{
         if(isUser){
           console.log("user exists generating tokens")
             const {refreshToken,accessToken} = await refreshAccessAndRefreshToken(isUser._id)
-            res.status(200)
             console.log("tokens generated redirecting to frontend")
+            res.status(200)
             .cookie("refreshToken",refreshToken,cookieOptions)
             .cookie("accessToken",accessToken,cookieOptions)
             res.redirect(`${ENV.FRONTEND_URL}`)
