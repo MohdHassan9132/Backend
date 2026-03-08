@@ -348,8 +348,8 @@ const googleAuth = asyncHandler(async(req,res)=>{
             const {refreshToken,accessToken} = await refreshAccessAndRefreshToken(user._id)
             console.log("tokens generated redirecting to frontend")
             res.status(201)
-            .cookie("refreshToken",refreshToken)
-            .cookie("accessToken",accessToken)
+            .cookie("refreshToken",refreshToken,cookieOptions)
+            .cookie("accessToken",accessToken,cookieOptions)
             res.redirect(`${ENV.FRONTEND_URL}`)
         }
     }
