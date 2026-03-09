@@ -102,7 +102,7 @@ const loginUser = asyncHandler(async (req, res) => {
   const password = req.body.password;
   const email = req.body.email;
   if (!username && !email) {
-    throw new ApiError(400, "Email or username is required");
+    throw new ApiError(400, "username is required");
   }
   let trimmedUsername;
   if (username !== undefined && username !== null) {
@@ -134,6 +134,11 @@ const loginUser = asyncHandler(async (req, res) => {
   if (!userData) {
     throw new ApiError(404, "No User found");
   }
+
+  if(userData.googleId){
+    throw new ApiError(400,"User registered with google, please login with google")
+  }
+  
 
   const isCorrect = await userData.isPasswordCorrect(trimmedPassword);
 
